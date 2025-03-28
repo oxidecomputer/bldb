@@ -1,0 +1,6 @@
+#!/bin/sh
+exec picocom \
+    -v 'rx -X' \
+    -s 'sxmodem'
+    --flow h \
+    -b 3000000 "$@"

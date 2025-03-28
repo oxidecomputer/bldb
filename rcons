@@ -1,0 +1,5 @@
+#!/bin/sh
+exec picocom \
+    -s 'sz -w 1024 -b' \
+    --flow h \
+    -b 3000000 "$@"

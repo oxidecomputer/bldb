@@ -1,0 +1,3 @@
+#!/bin/sh
+printf g
+exec sx -vv -Xk "$@"
