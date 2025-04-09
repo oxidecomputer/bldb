@@ -53,6 +53,31 @@ pub(super) fn parse_num<T: Default + TryFrom<u128>>(num: &str) -> Result<T> {
     T::try_from(num).map_err(|_| Error::NumRange)
 }
 
+fn parse_len<T: Default + TryFrom<u128>>(mut tok: &str) -> Result<T> {
+    let mut multiplier: u128 = 1;
+    while !tok.is_empty() {
+        if let Some(rest) = tok.strip_suffix(['k', 'K']) {
+            multiplier *= 1024;
+            tok = rest;
+            continue;
+        }
+        if let Some(rest) = tok.strip_suffix(['m', 'M']) {
+            multiplier *= 1024 * 1024;
+            tok = rest;
+            continue;
+        }
+        if let Some(rest) = tok.strip_suffix(['g', 'G']) {
+            multiplier *= 1024 * 1024 * 1024;
+            tok = rest;
+            continue;
+        }
+        break;
+    }
+    let num = if tok.is_empty() { 1 } else { parse_num(tok)? };
+    let num = multiplier.checked_mul(num).ok_or(Error::NumRange)?;
+    T::try_from(num).map_err(|_| Error::NumRange)
+}
+
 fn split_pair(s: &str, pat: char) -> Result<(&str, Option<&str>)> {
     let mut it = s.split(pat);
     let (Some(a), b, None) = (it.next(), it.next(), it.next()) else {
@@ -95,7 +120,7 @@ fn parse_value(s: &str) -> Result<Value> {
         Some(c) if c.is_ascii_digit() && !s.contains('/') => {
             let (a, b) = split_pair(s, ',')?;
             if let Some(b) = b {
-                Value::Pair(parse_num(a)?, parse_num(b)?)
+                Value::Pair(parse_num(a)?, parse_len(b)?)
             } else {
                 Value::Unsigned(parse_num(a)?)
             }
@@ -163,6 +188,26 @@ pub fn read(
         cmds.push(Command::Cmd(cmdline, tokens));
     }
     Ok(cmds)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_len_suffix() {
+        assert_eq!(1024_usize, parse_len("k").unwrap());
+        assert_eq!(4096_usize, parse_len("4K").unwrap());
+    }
+
+    #[test]
+    fn parse_value_tests() {
+        assert!(matches!(parse_value("").unwrap(), Value::Nil));
+        assert!(matches!(
+            parse_value("0x1000,4k").unwrap(),
+            Value::Pair(0x1000, 4096)
+        ));
+    }
 }
 
 fn help() {
