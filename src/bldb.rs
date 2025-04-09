@@ -292,6 +292,12 @@ fn range_4k(start: mem::V4KA) -> Range<mem::V4KA> {
     start..end
 }
 
+pub(crate) fn loader_text() -> Range<u64> {
+    let start = text_addr().addr() as u64;
+    let end = rodata_addr().addr() as u64;
+    start..end
+}
+
 /// When the loader enters Rust code, we know that we have a
 /// minimal virtual memory environment where the loader itself
 /// is mapped rwx, and the UART registers region is mapped

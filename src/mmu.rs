@@ -107,6 +107,7 @@
 extern crate alloc;
 
 use crate::mem;
+#[cfg(not(any(test, clippy)))]
 use crate::println;
 use crate::result::{Error, Result};
 #[cfg(not(any(test, clippy)))]
@@ -1193,32 +1194,27 @@ impl PageTable {
     /// mapped with the given permissions.  Supports mapping at the end of the
     /// address range.
     fn is_region_mapped(&self, region: &mem::Region) -> bool {
-        fn permits(eattrs: &mem::Attrs, attrs: &mem::Attrs) -> bool {
-            (!attrs.r() || eattrs.r())
-                && (!attrs.w() || eattrs.w())
-                && (!attrs.x() || eattrs.x())
-        }
         let mut start = region.start().addr();
         let end = region.end().addr();
         if !mem::is_canonical_range(start, end) {
             return false;
         }
-        let attrs = region.attrs();
+        let attrs: mem::Attrs = region.attrs();
         while start != end {
             let va = core::ptr::without_provenance(start);
             let len = match self.pml4.lookup(va) {
                 Some(EntryParts::Entry1G(_, eattrs))
-                    if permits(&eattrs, &attrs) =>
+                    if eattrs.permits(attrs) =>
                 {
                     PFN1G::SIZE - (start % PFN1G::SIZE)
                 }
                 Some(EntryParts::Entry2M(_, eattrs))
-                    if permits(&eattrs, &attrs) =>
+                    if eattrs.permits(attrs) =>
                 {
                     PFN2M::SIZE - (start % PFN2M::SIZE)
                 }
                 Some(EntryParts::Entry4K(_, eattrs))
-                    if permits(&eattrs, &attrs) =>
+                    if eattrs.permits(attrs) =>
                 {
                     PFN4K::SIZE
                 }
@@ -1478,6 +1474,9 @@ impl LoaderPageTable {
         Ok(())
     }
 
+    /// Maps the given virtual address range to the given physical
+    /// address with the given attributes, but restricted so that the
+    /// physical region can only map RAM, not MMIO space.
     pub(crate) unsafe fn map_ram(
         &mut self,
         range: Range<mem::V4KA>,
@@ -1500,7 +1499,7 @@ impl LoaderPageTable {
         unsafe { self.page_table.unmap_range(&range) }
     }
 
-    /// Returns the page table entry entry for the given virtual address, if it is
+    /// Returns the page table entry for the given virtual address, if it is
     /// mapped in this address space.
     pub(crate) fn lookup(&self, va: *const ()) -> Option<Entry> {
         self.page_table.lookup(va).map(|entry| match entry {
@@ -1525,6 +1524,15 @@ impl LoaderPageTable {
     ) -> bool {
         let region = mem::Region::new(range, attrs);
         self.page_table.is_region_mapped(&region)
+    }
+
+    pub(crate) fn is_region_readable(&self, range: Range<mem::V4KA>) -> bool {
+        self.is_region_mapped(range, mem::Attrs::new_ro())
+    }
+
+    pub(crate) fn is_region_writeable(&self, range: Range<mem::V4KA>) -> bool {
+        !Self::overlaps(&self.reserved, &range)
+            && self.is_region_mapped(range, mem::Attrs::new_rw())
     }
 
     /// Returns true iff region `a` overlaps any of the regions
@@ -1556,6 +1564,7 @@ impl LoaderPageTable {
 
     /// Dumps the contents of the page table.
     pub(crate) fn dump(&self) {
+        println!("Root (PML4): {root:#x}", root = self.phys_addr());
         self.page_table.pml4.dump(0);
     }
 }
@@ -1600,6 +1609,25 @@ mod loader_page_table_tests {
                 )
                 .is_err()
         });
+    }
+
+    #[test]
+    fn region_is_readable() {
+        let page_table = PageTable::new();
+        let mut loader_page_table = LoaderPageTable::new(page_table, &[], &[]);
+        let region = mem::V4KA::new(0x8000)..mem::V4KA::new(0xa000);
+        assert!(unsafe {
+            loader_page_table
+                .map_region(
+                    region,
+                    mem::Attrs::new_text(),
+                    mem::P4KA::new(0x8000),
+                )
+                .is_ok()
+        });
+        let ptr = ptr::without_provenance(0x9001);
+        let range = mem::page_range_raw(ptr, 20);
+        assert!(loader_page_table.is_region_readable(range));
     }
 }
 

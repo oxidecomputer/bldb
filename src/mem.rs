@@ -39,7 +39,7 @@ pub const fn is_canonical_range(start: usize, end: usize) -> bool {
     }
     // If in the lower portion of the canonical address space,
     // end is permitted to be exactly one beyond the supremum.
-    if start < LOW_CANON_SUP && end <= LOW_CANON_SUP {
+    if start < LOW_CANON_SUP && start <= end && end <= LOW_CANON_SUP {
         return true;
     }
     // Otherwise, the range is valid IFF it is in the upper
@@ -213,6 +213,12 @@ impl Attrs {
     pub(crate) fn set_c(&mut self, c: bool) {
         self.set_nc(!c);
     }
+
+    pub(crate) fn permits(self, wants: Attrs) -> bool {
+        (!wants.r() || self.r())
+            && (!wants.w() || self.w())
+            && (!wants.nx() || self.nx())
+    }
 }
 
 /// A region of virtual memory.
@@ -255,4 +261,22 @@ pub fn round_up_4k(va: usize) -> usize {
 /// boundary.
 pub fn round_down_4k(va: usize) -> usize {
     va & !V4KA::MASK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attrs_permits() {
+        let has = Attrs::new_data();
+        assert!(has.nx());
+        assert!(has.r());
+        assert!(has.w());
+        let wants = Attrs::new_ro();
+        assert!(!wants.nx());
+        assert!(!wants.w());
+        assert!(wants.r());
+        assert!(has.permits(wants));
+    }
 }

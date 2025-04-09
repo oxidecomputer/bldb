@@ -61,22 +61,44 @@ pub fn xd(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
     Ok(Value::Nil)
 }
 
+fn check_pair_canon(ptr: *const u8, len: usize) -> Result<(*const u8, usize)> {
+    let addr = ptr.addr();
+    if !mem::is_canonical_range(addr, addr + len) {
+        return Err(Error::PtrNonCanon);
+    }
+    Ok((ptr, len))
+}
+
 fn check_pair(
     config: &bldb::Config,
     ptr: *const u8,
     len: usize,
 ) -> Result<(*const u8, usize)> {
-    let addr = ptr.addr();
-    if !mem::is_canonical_range(addr, addr + len) {
-        return Err(Error::PtrNonCanon);
-    }
-    if !config.page_table.is_region_mapped(
-        mem::page_range_raw(ptr.cast(), len),
-        mem::Attrs::new_ro(),
-    ) {
-        return Err(Error::Unmapped);
-    }
-    Ok((ptr, len))
+    check_pair_canon(ptr, len).and_then(|(ptr, len)| {
+        let range = mem::page_range_raw(ptr.cast(), len);
+        if config.page_table.is_region_readable(range) {
+            Ok((ptr, len))
+        } else {
+            Err(Error::Unmapped)
+        }
+    })
+}
+
+fn check_pair_mut(
+    config: &bldb::Config,
+    ptr: *mut u8,
+    len: usize,
+) -> Result<(*mut u8, usize)> {
+    check_pair_canon(ptr.cast_const(), len)
+        .and_then(|(ptr, len)| {
+            let range = mem::page_range_raw(ptr.cast(), len);
+            if config.page_table.is_region_readable(range) {
+                Ok((ptr, len))
+            } else {
+                Err(Error::Unmapped)
+            }
+        })
+        .map(|(ptr, len)| (ptr.cast_mut(), len))
 }
 
 fn check_size(size: usize) -> bool {
@@ -101,13 +123,9 @@ fn parse_peek_poke_pair_mut(
 ) -> Result<(*mut u8, usize)> {
     value
         .as_ptr_len_mut()
-        .and_then(|(ptr, len)| check_pair(config, ptr.cast_const(), len))
+        .and_then(|(ptr, len)| check_pair_mut(config, ptr, len))
         .and_then(|(ptr, len)| {
-            if check_size(len) {
-                Ok((ptr.cast_mut(), len))
-            } else {
-                Err(Error::BadArgs)
-            }
+            if check_size(len) { Ok((ptr, len)) } else { Err(Error::BadArgs) }
         })
 }
 

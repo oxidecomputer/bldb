@@ -243,6 +243,8 @@ Supported commands include:
 * `mount <addr,len>` to mount the UFS ramdisk
 * `ls <file>` to list a file or directory on the ramdisk
 * `cat <file>` to display the contents of a file
+* `copy <file> <dst addr>,<dst len>` to copy the contents of a
+  file to a region of memory.
 * `elfinfo <file>` to read the contents of the ELF header and
   segment headers of an ELF file
 * `load <file>` to load the given ELF file and retrieve its
