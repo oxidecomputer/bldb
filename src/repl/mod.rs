@@ -14,6 +14,7 @@ use core::fmt;
 use core::ptr;
 use core::slice;
 
+mod bits;
 mod call;
 mod cat;
 mod copy;
@@ -226,6 +227,7 @@ fn evalcmd(
         "ecamrd" => ecam::read(config, env),
         "ecamwr" => ecam::write(config, env),
         "elfinfo" => elfinfo::run(config, env),
+        "getbits" => bits::get(config, env),
         "gpioget" => gpio::get(config, env),
         "gpioset" => gpio::set(config, env),
         "hexdump" | "xd" => memory::xd(config, env),
@@ -254,6 +256,7 @@ fn evalcmd(
         "rdsmn" => smn::read(config, env),
         "rx" => rx::run(config, env),
         "rz" => rz::run(config, env),
+        "setbits" => bits::set(config, env),
         "sha256" => sha::run(config, env),
         "sha256mem" => sha::mem(config, env),
         "unmap" => vm::unmap(config, env),
