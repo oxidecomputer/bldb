@@ -264,7 +264,32 @@ impl Idt {
     }
 }
 
+// Tries to skip over an instruction.
+//
+// # Safety
+// The caller must ensure `rip` points to an instruction
+// somewhere in the loader text.
+unsafe fn skip_instr(rip: u64) -> u64 {
+    use iced_x86::{Code, Decoder, DecoderOptions};
+    const MAX_INSTR_LEN: usize = 15;
+    let loader_text = crate::bldb::loader_text();
+    let ripmax = rip + MAX_INSTR_LEN as u64;
+    if !loader_text.contains(&rip) || !loader_text.contains(&ripmax) {
+        panic!("PC does not point into loader text");
+    }
+    let ptr = core::ptr::with_exposed_provenance(rip as usize);
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, MAX_INSTR_LEN) };
+    let mut decoder = Decoder::with_ip(64, bytes, rip, DecoderOptions::NONE);
+    let instr = decoder.decode();
+    if instr.code() == Code::INVALID {
+        panic!("Invalid instruction; can't skip: {instr:x?}");
+    } else {
+        rip + instr.len() as u64
+    }
+}
+
 extern "C" fn trap(frame: &mut TrapFrame) {
+    const GPF: u64 = 13;
     println!("Exception:");
     println!("{frame:#x?}");
     println!("cr0: {:#x}", unsafe { x86::controlregs::cr0() });
@@ -275,10 +300,17 @@ extern "C" fn trap(frame: &mut TrapFrame) {
     unsafe {
         backtrace(frame.rbp);
     }
-    // Arrange for the exception return to land in a halt loop.
-    // The seemingly superfluous cast to usize and then again to
-    // u64 keeps clippy happy.
-    frame.rip = crate::bldb::dnr as usize as u64;
+    // If this is a GPF, attempt to recover by skipping to the
+    // next instruction.  Otherwise, arrange for the exception
+    // return to land in a halt loop.
+    if frame.vector == GPF {
+        println!("GPF OK; attempting to resume");
+        frame.rip = unsafe { skip_instr(frame.rip) };
+    } else {
+        // The seemingly superfluous cast to usize and then
+        // again to u64 keeps clippy happy.
+        frame.rip = crate::bldb::dnr as usize as u64;
+    }
 }
 
 /// Prints a call backtrace starting from the given frame

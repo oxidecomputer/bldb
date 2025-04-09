@@ -79,6 +79,22 @@ pub fn cat(
     Ok(())
 }
 
+pub fn copy(
+    fs: &ufs::FileSystem<'_>,
+    path: &str,
+    dst: &mut [u8],
+) -> Result<usize> {
+    let path = path.as_bytes();
+    let file = fs.namei(path)?;
+    if file.file_type() != ufs::FileType::Regular {
+        println!("copy: not a regular file");
+        return Err(Error::BadArgs);
+    }
+    let len = core::cmp::min(file.size(), dst.len());
+    let nb = file.read(0, &mut dst[..len])?;
+    Ok(nb)
+}
+
 pub fn sha256(fs: &ufs::FileSystem<'_>, path: &str) -> Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
 

@@ -16,6 +16,7 @@ use core::slice;
 
 mod call;
 mod cat;
+mod copy;
 mod cpuid;
 mod ecam;
 mod elfinfo;
@@ -81,17 +82,12 @@ impl Value {
         let (ptr, len) = match self {
             Value::Nil => return Ok(None),
             Value::Slice(slice) => return Ok(Some(*slice)),
-            Value::Pair(addr, len) => {
-                Ok((unsigned_to_ptr(*addr as u128)?, *len))
-            }
+            Value::Pair(addr, len) => Ok((unsigned_to_ptr(*addr)?, *len)),
             Value::Unsigned(addr) => Ok((unsigned_to_ptr(*addr)?, deflen)),
             Value::Pointer(ptr) => Ok((ptr.cast_const(), deflen)),
             _ => Err(Error::BadArgs),
         }?;
-        if page_table.is_region_mapped(
-            mem::page_range_raw(ptr.cast(), len),
-            mem::Attrs::new_ro(),
-        ) {
+        if page_table.is_region_readable(mem::page_range_raw(ptr.cast(), len)) {
             Ok(Some(unsafe { slice::from_raw_parts(ptr, len) }))
         } else {
             Err(Error::Unmapped)
@@ -110,10 +106,8 @@ impl Value {
             Value::Pointer(ptr) => Ok((*ptr, deflen)),
             _ => Err(Error::BadArgs),
         }?;
-        if page_table.is_region_mapped(
-            mem::page_range_raw(ptr.cast(), len),
-            mem::Attrs::new_rw(),
-        ) {
+        if page_table.is_region_writeable(mem::page_range_raw(ptr.cast(), len))
+        {
             unsafe {
                 ptr::write_bytes(ptr, 0, len);
             }
@@ -227,6 +221,7 @@ fn evalcmd(
     match cmd {
         "call" => call::run(config, env),
         "cat" => cat::run(config, env),
+        "copy" => copy::run(config, env),
         "cpuid" => cpuid::run(config, env),
         "ecamrd" => ecam::read(config, env),
         "ecamwr" => ecam::write(config, env),
@@ -300,10 +295,17 @@ fn eval(
                     reader::Token::Value(v) => env.push(v),
                 }
             }
-            if let Some(Value::Cmd(cmd)) = env.pop() {
-                evalcmd(config, &cmd, env)
-            } else {
-                Ok(Value::Nil)
+            let Some(Value::Cmd(cmd)) = env.pop() else {
+                return Ok(Value::Nil);
+            };
+            match evalcmd(config, &cmd, env)? {
+                Value::Nil => Ok(Value::Nil),
+                v => {
+                    if &cmd != "pop" {
+                        env.push(v.clone());
+                    }
+                    Ok(v)
+                }
             }
         }
     }
@@ -326,11 +328,7 @@ pub(crate) fn run(config: &mut bldb::Config) {
                             env.clear();
                             val = Value::Nil;
                         }
-                        Ok(Value::Nil) => val = Value::Nil,
-                        Ok(v) => {
-                            env.push(v.clone());
-                            val = v;
-                        }
+                        Ok(v) => val = v,
                     }
                 }
                 println!("res: {val:?}");
