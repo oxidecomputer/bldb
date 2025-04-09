@@ -35,8 +35,8 @@ pushes the duplicate.  The `$` command will push a `nil`.
 
 To push an element onto the stack, use the `push` command.  To
 pop the top element, one may use the `pop` command.  Note also
-that one the `.` command separator and `$` to push and pop items
-onto and from the environment stack.  For example,
+that one can use the `.` command separator and `$` to push and
+pop items onto and from the environment stack.  For example,
 
 ```
 $a b c
@@ -63,7 +63,7 @@ call . load /platform/oxide/kernel/amd64/unix . mount . @inflate . rz
 ```
 
 And then send your compressed ramdisk image using ZMODEM.  For
-exampile, via `sz -w 1024 -b ramdisk.ufs.z`.
+example, via `sz -w 1024 -b ramdisk.ufs.z`.
 
 This command will receive a file via ZMODEM, and push the slice
 containing the received contents onto the environment stack.
@@ -122,8 +122,10 @@ Supported commands include:
   segment headers of an ELF file.
 * `load <file>` to load the given ELF file and retrieve its
   entry point.
-* `rdmsr <u32>` to read the numerbered MSR (note some MSRs can
-  be specified by name, such as `IA32_APIC_BASE`).
+* `loadmem <addr>,<len>` to load an ELF object from the given
+  region of memory.
+* `rdmsr <u32>` to read the numbered MSR (note some MSRs can be
+  specified by name, such as `IA32_APIC_BASE`).
 * `wrmsr <u32> <u64>` to write the given value to the given MSR.
 * `jfmt <num>` to format a number using the "jazzy" format from
   the illumos `mdb` debugger.

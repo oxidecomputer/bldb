@@ -242,6 +242,7 @@ fn evalcmd(
         "inw" => pio::inw(config, env),
         "jfmt" => jfmt::run(config, env),
         "load" => load::run(config, env),
+        "loadmem" => load::loadmem(config, env),
         "ls" | "list" => list::run(config, env),
         "map" => vm::map(config, env),
         "mapping" => vm::mapping(config, env),

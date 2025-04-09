@@ -20,7 +20,32 @@ use goblin::elf::{self, Elf};
 
 const PAGE_SIZE: usize = 4096;
 
-/// Loads an executable image contained in the given byte slice,
+pub(crate) trait Read {
+    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize>;
+}
+
+impl Read for ufs::Inode<'_> {
+    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize> {
+        self.read(off, dst).map_err(|_| Error::FsRead)
+    }
+}
+
+impl Read for &[u8] {
+    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize> {
+        let off = off as usize;
+        if off > self.len() {
+            return Err(Error::ElfTruncatedObj);
+        }
+        let bytes = &self[off..];
+        let len = usize::min(bytes.len(), dst.len());
+        if len > 0 {
+            dst[..len].copy_from_slice(&bytes[..len]);
+        }
+        Ok(0)
+    }
+}
+
+/// Loads an executable image contained in the given file
 /// creating virtual mappings as required.  Returns the image's
 /// ELF entry point on success.
 pub(crate) fn load(
@@ -41,7 +66,29 @@ pub(crate) fn load(
     Ok(elf.entry)
 }
 
-pub(crate) fn elfinfo(file: &ufs::Inode<'_>) -> Result<()> {
+/// Loads an executable image contained in the given byte slice,
+/// creating virtual mappings as required.  Returns the image's
+/// ELF entry point on success.
+pub(crate) fn load_bytes(
+    page_table: &mut LoaderPageTable,
+    bytes: &[u8],
+) -> Result<u64> {
+    let elf = parse_elf(bytes)?;
+    for section in elf.program_headers.iter().filter(|&h| h.p_type == PT_LOAD) {
+        let file_range = section.file_range();
+        if bytes.len() < file_range.end {
+            return Err(Error::ElfTruncatedObj);
+        }
+        load_segment(page_table, section, &bytes)?;
+    }
+    crate::println!(
+        "Loaded ELF object from memory: entry point {:#x?}",
+        elf.entry
+    );
+    Ok(elf.entry)
+}
+
+pub(crate) fn elfinfo<T: Read>(file: &T) -> Result<()> {
     use goblin::elf;
 
     let mut buf = [0u8; PAGE_SIZE];
@@ -146,10 +193,10 @@ fn parse_program_headers(
 
 /// Loads the given ELF segment, creating virtual mappings for
 /// it as required.
-fn load_segment(
+fn load_segment<T: Read>(
     page_table: &mut LoaderPageTable,
     segment: &ProgramHeader,
-    file: &ufs::Inode<'_>,
+    file: &T,
 ) -> Result<()> {
     let pa = segment.p_paddr;
     if pa % mem::P4KA::ALIGN != 0 {
