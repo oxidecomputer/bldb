@@ -15,6 +15,7 @@ use core::fmt;
 use core::hint;
 use core::ptr;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 use static_assertions::const_assert_eq;
 
 bitstruct! {
@@ -484,8 +485,44 @@ impl Uart {
         unsafe { &mut *regs }
     }
 
+    pub fn getb(&mut self) -> u8 {
+        loop {
+            if let Some(b) = self.getb_timeout(Duration::ZERO) {
+                return b;
+            }
+            hint::spin_loop();
+        }
+    }
+
+    pub fn getb_timeout(&mut self, timeout: Duration) -> Option<u8> {
+        self.try_getb_timeout(timeout).ok()
+    }
+
     pub fn try_getb(&mut self) -> Result<u8> {
-        while {
+        self.try_getb_timeout(Duration::ZERO)
+    }
+
+    pub fn try_getb_timeout(&mut self, timeout: Duration) -> Result<u8> {
+        if self.wait_data_ready(timeout)? {
+            let data = unsafe { ptr::read_volatile(&self.read_mmio_mut().rbr) };
+            Ok(data.data())
+        } else {
+            Err(Error::Timeout)
+        }
+    }
+
+    /// Waits for data to arrive on the UART, up to the timeout,
+    /// or forever if timeout is Duration::ZERO.  Returns an
+    /// `Err` if an error occurs while waiting, `Ok(true)` if
+    /// data is available, or `Ok(false)` if no data arrived
+    /// before the timeout expired.
+    pub fn wait_data_ready(&mut self, timeout: Duration) -> Result<bool> {
+        use crate::clock;
+        let ns = timeout.as_nanos();
+        let cycles = ns * clock::frequency() / clock::NANOS_PER_SEC;
+        let start = u128::from(clock::rdtsc());
+        let end = u64::try_from(start.checked_add(cycles).unwrap()).unwrap();
+        while timeout.is_zero() || clock::rdtsc() < end {
             let lsr = unsafe { ptr::read_volatile(&self.read_mmio_mut().lsr) };
             if lsr.break_intr() {
                 return Err(Error::UartBreak);
@@ -499,21 +536,12 @@ impl Uart {
             if lsr.parity_err() {
                 return Err(Error::UartParity);
             }
-            !lsr.data_ready()
-        } {
-            hint::spin_loop();
-        }
-        let data = unsafe { ptr::read_volatile(&self.read_mmio_mut().rbr) };
-        Ok(data.data())
-    }
-
-    pub fn getb(&mut self) -> u8 {
-        loop {
-            if let Ok(b) = self.try_getb() {
-                return b;
+            if lsr.data_ready() {
+                return Ok(true);
             }
             hint::spin_loop();
         }
+        Ok(false)
     }
 
     pub fn try_putb(&mut self, b: u8) -> Result<()> {

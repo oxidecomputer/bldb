@@ -134,16 +134,64 @@ fn parse_value(s: &str) -> Result<Value> {
     Ok(v)
 }
 
+fn readline(config: &mut bldb::Config) -> Result<String> {
+    let prompt = match config.prompt {
+        cons::Prompt::Tenex => prompt::tenex,
+        cons::Prompt::Spinner => prompt::spin,
+        cons::Prompt::Pulser => prompt::pulse,
+    };
+    if config.prompt == cons::Prompt::Tenex {
+        let mut buf = [0u8; 1024];
+        cons::readline(prompt, &mut config.cons, &mut buf).map(String::from)
+    } else {
+        loop {
+            let mut buf = [0u8; 1024];
+            match cons::readline_timeout(
+                prompt,
+                &mut config.cons,
+                core::time::Duration::from_secs(10),
+                &mut buf,
+            ) {
+                Err(Error::Timeout) => {
+                    cons::backspace(&mut config.cons, false);
+                    continue;
+                }
+                res => return res.map(String::from),
+            }
+        }
+    }
+}
+
+mod prompt {
+    use crate::{cons, uart};
+    use core::time::Duration;
+
+    pub(super) fn tenex(term: &mut uart::Uart) -> usize {
+        term.putb(b'@');
+        1
+    }
+
+    pub(super) fn pulse(term: &mut uart::Uart) -> usize {
+        cons::cycle(term, b"", b"oOo.", b" ", Duration::from_millis(500));
+        tenex(term)
+    }
+
+    pub(super) fn spin(term: &mut uart::Uart) -> usize {
+        cons::cycle(term, b"", b"|/-\\", b" ", Duration::from_millis(250));
+        tenex(term)
+    }
+}
+
 pub fn read(
     config: &mut bldb::Config,
     env: &mut Vec<Value>,
     lastval: &Value,
 ) -> Result<Vec<Command>> {
-    let mut buf = [0u8; 1024];
     let line = loop {
-        let Ok(line) = cons::readline("@", &mut config.cons, &mut buf) else {
+        let Ok(s) = readline(config) else {
             return Err(Error::Reader);
         };
+        let line = s.as_str();
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -151,7 +199,7 @@ pub fn read(
         if eval_reader_command(config, line, env, lastval) {
             continue;
         }
-        break line;
+        break s;
     };
     let mut cmds = Vec::<Command>::new();
     let cs: Box<dyn Iterator<Item = &str>> = if line.contains('|') {
@@ -399,6 +447,14 @@ Supported commands include:
   from `<value>`
 * `setbits <start>,<end> <new bits> <value>` sets the given bit
   range in `<value>` to `<new bits>`
+* `spinner` displays a moving "spinner" on the terminal until a
+  byte is received on the UART.  The `pulser` and `throbber`
+  commands do essentially the same thing, with a different
+  character pattern.  The `megapulser` command exists just for
+  fun.
+* `prompt <tenex | spinner | pulser>` to change the default
+  prompt type.  `tenex` is the "@" prompt.  The other two are
+  animated; see the `spinner` and `pulser` commands above.
 "#
     );
 }

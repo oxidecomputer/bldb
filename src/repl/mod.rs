@@ -31,6 +31,7 @@ mod memory;
 mod mount;
 mod msr;
 mod pio;
+mod prompt;
 mod reader;
 mod rx;
 mod rz;
@@ -244,6 +245,7 @@ fn evalcmd(
         "map" => vm::map(config, env),
         "mapping" => vm::mapping(config, env),
         "mappings" => vm::mappings(config, env),
+        "megapulser" => prompt::mega_pulser(config, env),
         "mount" => mount::run(config, env),
         "outb" => pio::outb(config, env),
         "outl" => pio::outl(config, env),
@@ -251,6 +253,8 @@ fn evalcmd(
         "peek" => memory::read(config, env),
         "poke" => memory::write(config, env),
         "pop" => Ok(pop2(env)),
+        "prompt" => prompt::prompt(config, env),
+        "pulser" | "throbber" => prompt::pulser(config, env),
         "push" => Ok(Value::Nil),
         "rdmsr" => msr::read(config, env),
         "rdsmn" => smn::read(config, env),
@@ -259,6 +263,7 @@ fn evalcmd(
         "setbits" => bits::set(config, env),
         "sha256" => sha::run(config, env),
         "sha256mem" => sha::mem(config, env),
+        "spinner" => prompt::spinner(config, env),
         "unmap" => vm::unmap(config, env),
         "wrmsr" => msr::write(config, env),
         "wrsmn" => smn::write(config, env),

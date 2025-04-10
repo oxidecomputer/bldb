@@ -38,6 +38,7 @@
 
 extern crate alloc;
 
+use crate::cons;
 use crate::gpio;
 use crate::idt;
 use crate::iomux;
@@ -63,6 +64,7 @@ pub(crate) struct Config {
     pub(crate) loader_region: Range<mem::V4KA>,
     pub(crate) page_table: mmu::LoaderPageTable,
     pub(crate) ramdisk: Option<ufs::FileSystem<'static>>,
+    pub(crate) prompt: cons::Prompt,
 }
 
 impl Config {
@@ -87,6 +89,7 @@ impl fmt::Debug for Config {
             "    ramdisk: {:?}",
             self.ramdisk.as_ref().map(|_| "mounted")
         )?;
+        writeln!(f, "    prompt: {:?}", self.prompt)?;
         write!(f, "}}")
     }
 }
@@ -143,6 +146,7 @@ pub(crate) unsafe extern "C" fn init(bist: u32) -> &'static mut Config {
             &mmio_region,
         ),
         ramdisk: None,
+        prompt: cons::DEFAULT_PROMPT,
     });
     if false {
         say_hi_sp(&mut config, 4);
