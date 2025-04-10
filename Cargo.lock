@@ -230,9 +230,9 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "miniz_oxide"
-version = "0.8.5"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e3e04debbb59698c15bacbb6d93584a8c0ca9cc3213cb423d31f760d8843ce5"
+checksum = "3be647b768db090acb35d5ec5db2b0e1f1de11133ca123b9eacf5137868f892a"
 dependencies = [
  "adler2",
 ]
@@ -287,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "scroll_derive"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f81c2fde025af7e69b1d1420531c8a8811ca898919db177141a85313b1cb932"
+checksum = "1783eabc414609e28a5ba76aee5ddd52199f7107a0b24c2e9746a1ecc34a683d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -419,7 +419,7 @@ dependencies = [
 [[package]]
 name = "xmodem"
 version = "0.4.0"
-source = "git+https://github.com/oxidecomputer/xmodem.rs?branch=pr#b066322e83df764e12e668ec2c1ff6b67cb752f6"
+source = "git+https://github.com/oxidecomputer/xmodem.rs#b066322e83df764e12e668ec2c1ff6b67cb752f6"
 dependencies = [
  "crc16",
  "log",
@@ -428,7 +428,7 @@ dependencies = [
 [[package]]
 name = "zmodem2"
 version = "0.1.2"
-source = "git+https://codeberg.org/dancrossnyc/zmodem2?branch=nostd#b06f75ef0a64b7a802706bf815ee187ca6ef157f"
+source = "git+https://github.com/oxidecomputer/zmodem2?branch=nostd#b06f75ef0a64b7a802706bf815ee187ca6ef157f"
 dependencies = [
  "bitflags 2.9.0",
  "crc",
