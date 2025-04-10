@@ -250,7 +250,7 @@ fn evalcmd(
         "outw" => pio::outw(config, env),
         "peek" => memory::read(config, env),
         "poke" => memory::write(config, env),
-        "pop" => Ok(popenv(env)),
+        "pop" => Ok(pop2(env)),
         "push" => Ok(Value::Nil),
         "rdmsr" => msr::read(config, env),
         "rdsmn" => smn::read(config, env),
@@ -276,8 +276,23 @@ fn dup(env: &mut Vec<Value>) -> Value {
     }
 }
 
+fn swaptop(env: &mut [Value]) -> Value {
+    let len = env.len();
+    if len > 1 {
+        env.swap(len - 1, len - 2);
+        env[len - 1].clone()
+    } else {
+        Value::Nil
+    }
+}
+
 fn popenv(env: &mut Vec<Value>) -> Value {
     if let Some(v) = env.pop() { v } else { Value::Nil }
+}
+
+fn pop2(env: &mut Vec<Value>) -> Value {
+    popenv(env);
+    popenv(env)
 }
 
 fn eval(
@@ -287,12 +302,16 @@ fn eval(
 ) -> Result<Value> {
     match cmd {
         reader::Command::Push => Ok(dup(env)),
+        reader::Command::Swap => Ok(swaptop(env)),
         reader::Command::Cmd(_, tokens) => {
             let mut tokens = tokens.clone();
             while let Some(token) = tokens.pop() {
                 match token {
                     reader::Token::Push => {
                         dup(env);
+                    }
+                    reader::Token::Swap => {
+                        swaptop(env);
                     }
                     reader::Token::Term => env.push(Value::Nil),
                     reader::Token::Value(v) => env.push(v),
@@ -304,9 +323,7 @@ fn eval(
             match evalcmd(config, &cmd, env)? {
                 Value::Nil => Ok(Value::Nil),
                 v => {
-                    if &cmd != "pop" {
-                        env.push(v.clone());
-                    }
+                    env.push(v.clone());
                     Ok(v)
                 }
             }
