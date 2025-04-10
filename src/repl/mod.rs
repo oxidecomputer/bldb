@@ -36,6 +36,7 @@ mod rx;
 mod rz;
 mod sha;
 mod smn;
+mod spinner;
 mod vm;
 
 #[derive(Clone)]
@@ -251,6 +252,7 @@ fn evalcmd(
         "peek" => memory::read(config, env),
         "poke" => memory::write(config, env),
         "pop" => Ok(pop2(env)),
+        "pulser" | "throbber" => spinner::pulser(config, env),
         "push" => Ok(Value::Nil),
         "rdmsr" => msr::read(config, env),
         "rdsmn" => smn::read(config, env),
@@ -259,6 +261,7 @@ fn evalcmd(
         "setbits" => bits::set(config, env),
         "sha256" => sha::run(config, env),
         "sha256mem" => sha::mem(config, env),
+        "spinner" => spinner::spinner(config, env),
         "unmap" => vm::unmap(config, env),
         "wrmsr" => msr::write(config, env),
         "wrsmn" => smn::write(config, env),
