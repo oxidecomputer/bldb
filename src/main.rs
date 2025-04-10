@@ -16,6 +16,7 @@ extern crate alloc;
 
 mod allocator;
 mod bldb;
+mod clock;
 mod cons;
 mod cpuid;
 mod gpio;
