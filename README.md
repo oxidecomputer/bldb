@@ -31,7 +31,8 @@ values (when appropriate).  The REPL will always print the value
 returned by the last command.
 
 The `@` command duplicates the value at the top of the stack and
-pushes the duplicate.  The `$` command will push a `nil`.
+pushes the duplicate.  The `$` command will push a `nil`.  The
+`#` command swaps the two elements at the top of the stack.
 
 To push an element onto the stack, use the `push` command.  To
 pop the top element, one may use the `pop` command.  Note also
@@ -95,6 +96,8 @@ equivalent to:
 rz | @inflate | mount | load /platform/oxide/kernel/amd64/unix | call
 ```
 
+## Commands
+
 The reader supports a handful of "reader commands":
 
 * `clear` clears the terminal window
@@ -126,6 +129,10 @@ Supported commands include:
   entry point.
 * `loadmem <addr>,<len>` to load an ELF object from the given
   region of memory.
+* `call <location> [<up to 6 args>]` calls the System V ABI
+  compliant function at `<location>`, passing up to six
+  arguments taken from the environment stack argument list
+  terminated by nil.
 * `rdmsr <u32>` to read the numbered MSR (note some MSRs can be
   specified by name, such as `IA32_APIC_BASE`).
 * `wrmsr <u32> <u64>` to write the given value to the given MSR.
