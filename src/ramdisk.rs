@@ -12,7 +12,7 @@ use crate::ufs;
 pub fn mount(
     ramdisk: &'static [u8],
 ) -> Result<Option<ufs::FileSystem<'static>>> {
-    let fs = ufs::FileSystem::new(ramdisk);
+    let fs = ufs::FileSystem::new(ramdisk)?;
     if let Ok(ufs::State::Clean) = fs.state() {
         let flags = fs.flags();
         println!("ramdisk mounted successfully (Clean, {flags:?})");

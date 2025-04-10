@@ -30,6 +30,8 @@ enum Command {
         profile: BuildProfile,
         #[clap(flatten)]
         locked: Locked,
+        #[clap(flatten)]
+        features: Features,
     },
     /// cargo clean
     Clean,
@@ -37,6 +39,8 @@ enum Command {
     Clippy {
         #[clap(flatten)]
         locked: Locked,
+        #[clap(flatten)]
+        features: Features,
     },
     /// disassemble bldb
     Disasm {
@@ -44,6 +48,8 @@ enum Command {
         profile: BuildProfile,
         #[clap(flatten)]
         locked: Locked,
+        #[clap(flatten)]
+        features: Features,
 
         /// Interleave source and assembler output
         #[clap(long)]
@@ -57,6 +63,8 @@ enum Command {
         profile: BuildProfile,
         #[clap(flatten)]
         locked: Locked,
+        #[clap(flatten)]
+        features: Features,
     },
 }
 
@@ -102,27 +110,50 @@ impl Locked {
     }
 }
 
+/// Cargo `--features` setting.
+#[derive(Parser)]
+struct Features {
+    #[clap(long)]
+    features: Option<String>,
+}
+
+impl Features {
+    // Returns the cargo argument corresponding to the given
+    // features.
+    fn to_string(&self) -> String {
+        self.features
+            .clone()
+            .map(|features| format!("--features={}", features))
+            .unwrap_or("".into())
+    }
+}
+
 fn main() {
     let xtask = Xtask::parse();
     match xtask.cmd {
-        Command::Build { profile, locked } => build(profile, locked),
-        Command::Test { profile, locked } => test(profile, locked),
-        Command::Disasm { profile, locked, source } => {
-            disasm(profile, locked, source)
+        Command::Build { profile, locked, features } => {
+            build(profile, locked, features)
+        }
+        Command::Test { profile, locked, features } => {
+            test(profile, locked, features)
+        }
+        Command::Disasm { profile, locked, features, source } => {
+            disasm(profile, locked, features, source)
         }
         Command::Expand => expand(),
-        Command::Clippy { locked } => clippy(locked),
+        Command::Clippy { locked, features } => clippy(locked, features),
         Command::Clean => clean(),
     }
 }
 
 /// Runs a cross-compiled build.
-fn build(profile: BuildProfile, locked: Locked) {
+fn build(profile: BuildProfile, locked: Locked, features: Features) {
     let profile = profile.to_str();
     let locked = locked.to_str();
+    let features = features.to_string();
     let target = target();
     let args = format!(
-        "build {profile} {locked} \
+        "build {profile} {locked} {features} \
             -Z build-std=core,alloc \
             -Z build-std-features=compiler-builtins-mem \
             --target {target}.json"
@@ -131,16 +162,22 @@ fn build(profile: BuildProfile, locked: Locked) {
 }
 
 /// Runs tests.
-fn test(profile: BuildProfile, locked: Locked) {
+fn test(profile: BuildProfile, locked: Locked, features: Features) {
     let profile = profile.to_str();
     let locked = locked.to_str();
-    let args = format!("test {profile} {locked}");
+    let features = features.to_string();
+    let args = format!("test {profile} {locked} {features}");
     cmd(cargo(), args.split_whitespace()).run().expect("test successful");
 }
 
 /// Build and disassemble the bldb binary.
-fn disasm(profile: BuildProfile, locked: Locked, source: bool) {
-    build(profile.clone(), locked);
+fn disasm(
+    profile: BuildProfile,
+    locked: Locked,
+    features: Features,
+    source: bool,
+) {
+    build(profile.clone(), locked, features);
     let triple = target();
     let profile_dir = profile.dir().to_str().unwrap();
     let flags = source.then_some("-S").unwrap_or("");
@@ -159,9 +196,10 @@ fn expand() {
 }
 
 /// Runs the Clippy linter.
-fn clippy(locked: Locked) {
+fn clippy(locked: Locked, features: Features) {
     let locked = locked.to_str();
-    let args = format!("clippy {locked}");
+    let features = features.to_string();
+    let args = format!("clippy {locked} {features}");
     cmd(cargo(), args.split_whitespace()).run().expect("clippy successful");
 }
 
