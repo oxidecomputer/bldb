@@ -16,6 +16,6 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
     };
     let path = repl::popenv(env).as_string().map_err(usage)?;
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
-    ramdisk::cat(&mut config.cons, fs, &path)?;
+    ramdisk::cat(&mut config.cons, fs.as_ref(), &path)?;
     Ok(Value::Nil)
 }
