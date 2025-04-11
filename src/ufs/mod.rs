@@ -230,13 +230,15 @@ const_assert!(core::mem::size_of::<SuperBlock>() <= SUPER_BLOCK_SIZE);
 
 impl SuperBlock {
     /// Returns the superblock, as "read" from the given "disk."
-    pub fn read(disk: &[u8]) -> SuperBlock {
+    pub fn read(disk: &[u8]) -> Result<SuperBlock> {
         let sbb =
             &disk[SUPER_BLOCK_OFFSET..SUPER_BLOCK_OFFSET + SUPER_BLOCK_SIZE];
         let p = sbb.as_ptr().cast::<SuperBlock>();
         let sb = unsafe { ptr::read_unaligned(p) };
-        assert_eq!(sb.magic, MAGIC);
-        sb
+        if sb.magic != MAGIC {
+            return Err(Error::FsInvMagic);
+        }
+        Ok(sb)
     }
 
     /// Returns the block address of the given cylinder group, as
@@ -432,9 +434,9 @@ pub struct FileSystem<'a> {
 }
 
 impl<'a> FileSystem<'a> {
-    pub fn new(sd: &'a [u8]) -> FileSystem<'a> {
-        let sb = SuperBlock::read(sd);
-        FileSystem { sd, sb }
+    pub fn new(sd: &'a [u8]) -> Result<FileSystem<'a>> {
+        let sb = SuperBlock::read(sd)?;
+        Ok(FileSystem { sd, sb })
     }
 
     pub fn root_inode(&self) -> Inode {
