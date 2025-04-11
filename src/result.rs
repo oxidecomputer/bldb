@@ -50,6 +50,7 @@ pub(crate) enum Error {
     PtrAlign,
     PageAlign,
     PtrProvenance,
+    Offset,
     Mmu(&'static str),
 }
 
@@ -105,6 +106,7 @@ impl Error {
             Self::PageAlign => "Address not page aligned",
             Self::PtrAlign => "Pointer misaligned",
             Self::PtrProvenance => "Pointer has unknown provenance",
+            Self::Offset => "Offset out of bounds",
             Self::Mmu(s) => s,
         }
     }
