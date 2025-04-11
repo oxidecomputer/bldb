@@ -13,14 +13,14 @@ pub const MAX_NAME_LEN: usize = 255;
 pub const PREFIX_LEN: usize = 8;
 
 /// Newtype around an inode representing a directory file.
-pub struct Directory<'a> {
-    pub(super) inode: &'a Inode<'a>,
+pub struct Directory {
+    pub(super) inode: Inode,
 }
 
-impl<'a> Directory<'a> {
+impl Directory {
     /// Creates a new directory from the given inode. Asserts
     /// that the inode refers to a directory.
-    pub fn new(inode: &'a Inode<'a>) -> Directory<'a> {
+    pub fn new(inode: Inode) -> Directory {
         let mode = inode.mode();
         assert_eq!(mode.typ(), FileType::Dir);
         Directory { inode }
@@ -28,14 +28,14 @@ impl<'a> Directory<'a> {
 
     /// Tries to create a new `Dirctory`` from the given inode.
     /// Returns `None`` if the inode's type is not a directory.
-    pub fn try_new(inode: &'a Inode<'a>) -> Option<Directory<'a>> {
+    pub fn try_new(inode: Inode) -> Option<Directory> {
         let isdir = inode.mode().typ() == FileType::Dir;
         isdir.then(|| Self::new(inode))
     }
 
     /// Returns an interator over the directory entries in this
     /// directory.
-    pub fn iter(&self) -> Iter<'_> {
+    pub fn iter(&self) -> Iter {
         Iter::new(self)
     }
 }
@@ -43,14 +43,14 @@ impl<'a> Directory<'a> {
 /// A directory entry iterator.  Iterates over the directory
 /// entries in the given directory.
 pub struct Iter<'a> {
-    inode: &'a Inode<'a>,
+    inode: &'a Inode,
     pos: u64,
 }
 
-impl<'a> Iter<'a> {
+impl Iter<'_> {
     /// Creates a new directory entry iterator for the given
     /// directory.
-    pub fn new(dir: &'a Directory<'a>) -> Iter<'a> {
+    pub fn new(dir: &Directory) -> Iter<'_> {
         let pos = 0;
         let inode = &dir.inode;
         Iter { inode, pos }

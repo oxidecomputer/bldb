@@ -40,18 +40,23 @@
 //! Unix''.  ACM Transactions on Computer Systems 2, 3 (Aug.
 //! 1984), 181-197. https://doi.org/10.1145/989.990
 
+use crate::io;
+use crate::println;
+use crate::ramdisk::{self, FileType};
+use crate::result::{Error, Result};
+
 use core::cmp;
 use core::fmt::{self, Write};
 use core::mem;
 use core::ops::Range;
 use core::ptr;
 
+use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::vec;
 use bitflags::bitflags;
 use bitstruct::bitstruct;
 use static_assertions::const_assert;
-
-use crate::result::{Error, Result};
 
 /// The size of a "Device Block".  That is, the size of a
 /// physical block on the underlying storage device, in bytes.
@@ -403,7 +408,7 @@ const _FSL_SIZE: usize = (NDADDR + NIADDR - 1) * core::mem::size_of::<u32>();
 
 /// The storage-resident version of an inode.
 #[repr(C, align(128))]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DInode {
     smode: u16,             // 0: mode and type of file
     nlink: u16,             // 2: number of links to file
@@ -427,16 +432,19 @@ pub struct DInode {
     oeftflag: u32,          // 124: extended attr directory ino, 0 = none
 }
 
-#[derive(Debug)]
-pub struct FileSystem<'a> {
-    sd: &'a [u8],
+struct InnerFileSystem {
+    sd: io::Sd,
     sb: SuperBlock,
 }
 
-impl<'a> FileSystem<'a> {
-    pub fn new(sd: &'a [u8]) -> Result<FileSystem<'a>> {
+#[derive(Clone)]
+pub struct FileSystem(Rc<InnerFileSystem>);
+
+impl FileSystem {
+    pub fn new(sd: &[u8]) -> Result<FileSystem> {
         let sb = SuperBlock::read(sd)?;
-        Ok(FileSystem { sd, sb })
+        let sd = io::Sd::from_slice(sd);
+        Ok(FileSystem(Rc::new(InnerFileSystem { sd, sb })))
     }
 
     pub fn root_inode(&self) -> Inode {
@@ -448,54 +456,60 @@ impl<'a> FileSystem<'a> {
     }
 
     pub fn fragsize(&self) -> usize {
-        self.sb.fsize as usize
+        self.0.sb.fsize as usize
     }
 
     /// Returns the filesystem state from the superblock.
     pub fn state(&self) -> Result<State> {
-        self.sb.state()
+        self.0.sb.state()
     }
 
     /// Returns the filesystem flags from the superblock.
     pub fn flags(&self) -> Flags {
-        self.sb.flags()
+        self.0.sb.flags()
     }
 
     /// Returns the disk block number of a fragment.
     pub fn frags_to_sdblock(&self, fbno: usize) -> usize {
-        self.sb.fsbtodb(fbno)
+        self.0.sb.fsbtodb(fbno)
     }
 
     /// Returns the logical file block number for the given byte
     /// offset.
     pub fn logical_blockno(&self, offset: u64) -> usize {
-        self.sb.lblkno(offset) as usize
+        self.0.sb.lblkno(offset) as usize
     }
 
     /// Returns the number of inodes per fragment.
     #[allow(dead_code)]
     pub fn inodes_per_frag(&self) -> usize {
-        self.sb.inopf() as usize
+        self.0.sb.inopf() as usize
     }
 
     /// Returns the number of cylinder groups in the filesystem,
     /// as a Range, starting at zero.
     #[allow(dead_code)]
     pub fn cylgroups(&self) -> Range<u32> {
-        0..self.sb.ncg
+        0..self.0.sb.ncg
     }
 
     /// Returns the byte offset of the start of the data block
     /// region for the given cylinder group.
     #[allow(dead_code)]
     pub fn cylgroup_data_offset(&self, cylgrp: u32) -> usize {
-        self.sb.cgdmin(cylgrp) as usize * self.fragsize()
+        self.0.sb.cgdmin(cylgrp) as usize * self.fragsize()
     }
 
     /// Returns the number of indirect blocks spanned by a file
     /// system block.
     pub fn indir_span_per_block(&self) -> usize {
-        self.sb.nindir as usize
+        self.0.sb.nindir as usize
+    }
+
+    /// Returns the offset of given inode, relative to the
+    /// start of the storage area.
+    pub fn inode_offset(&self, ino: u32) -> usize {
+        self.0.sb.inode_offset(ino)
     }
 
     /// Returns the logical fragment number in a block for a given
@@ -507,16 +521,12 @@ impl<'a> FileSystem<'a> {
 
     /// Returns a the block size of the filesystem.
     pub fn blocksize(&self) -> usize {
-        self.sb.bsize as usize
+        self.0.sb.bsize as usize
     }
 
     /// Maps a file path name to an inode number, searching from
     /// some starting inode.
-    fn namex(
-        &'a self,
-        mut ip: Inode<'a>,
-        mut path: &[u8],
-    ) -> Result<Inode<'a>> {
+    fn namex(&self, mut ip: Inode, mut path: &[u8]) -> Result<Inode> {
         // Split a '/' separated pathname into the first
         // componenet and remainder.  If the path name is
         // empty, or contains only '/'s, returns None.
@@ -531,7 +541,7 @@ impl<'a> FileSystem<'a> {
             if dirname.is_empty() {
                 break;
             }
-            let dir = Directory::try_new(&ip).ok_or(Error::FsInvPath)?;
+            let dir = Directory::try_new(ip.clone()).ok_or(Error::FsInvPath)?;
             let mut tip =
                 if let Some(entry) = dir.iter().find(|d| d.name() == dirname) {
                     self.inode(entry.ino())
@@ -550,14 +560,20 @@ impl<'a> FileSystem<'a> {
     }
 
     /// Maps a file path name to an inode number.
-    pub fn namei(&self, path: &[u8]) -> Result<Inode<'_>> {
+    pub fn namei(&self, path: &[u8]) -> Result<Inode> {
         self.namex(self.root_inode(), path)
+    }
+
+    /// Returns a subset of the filesystem storage area
+    /// corresponding to the given length and offset.
+    fn subset(&self, offset: usize, len: usize) -> io::Sd {
+        self.0.sd.subset(offset, len)
     }
 
     /// Returns a pointer to the data area.
     /// Used for exposing provenance.
     pub fn data(&self) -> *const u8 {
-        self.sd.as_ptr()
+        self.0.sd.as_ptr()
     }
 }
 
@@ -566,10 +582,32 @@ impl<'a> FileSystem<'a> {
 /// Note that UFS supports "holes"; block-sized and aligned
 /// spans of bytes within a file that are all zeroes are
 /// specially marked, and not backed by allocated blocks.
-#[derive(Clone, Copy, Debug)]
-pub enum Block<'a> {
+enum Block {
     Hole,
-    Sd(&'a [u8]),
+    Sd(io::Sd),
+}
+
+impl Block {
+    fn read(&self, offset: usize, dst: &mut [u8]) {
+        match self {
+            Self::Hole => dst.fill(0),
+            Self::Sd(sd) => {
+                let ptr = sd.as_ptr();
+                let len = sd.len();
+                if offset >= len {
+                    return;
+                }
+                let count = cmp::min(dst.len(), len - offset);
+                unsafe {
+                    ptr::copy(
+                        ptr.wrapping_add(offset),
+                        dst.as_mut_ptr(),
+                        count,
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// This block of constants provides the traditional Unix names
@@ -583,27 +621,6 @@ const IFLNK: u8 = 0o12;
 const IFSHAD: u8 = 0o13;
 const IFSOCK: u8 = 0o14;
 const IFATTRDIR: u8 = 0o16;
-
-/// The type of file, taken from the inode.
-///
-/// Unix files can be one of a limited set of types; for
-/// instance, directories are a type of file.  The type
-/// is encoded in the mode field of the inode; these are
-/// the various types that are recognized.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-#[repr(u8)]
-pub enum FileType {
-    Unused = 0,
-    Fifo = IFIFO,
-    Char = IFCHR,
-    Dir = IFDIR,
-    Block = IFBLK,
-    Regular = IFREG,
-    SymLink = IFLNK,
-    ShadowInode = IFSHAD,
-    Sock = IFSOCK,
-    AttrDir = IFATTRDIR,
-}
 
 impl FileType {
     /// Returns a single character that represents the file
@@ -667,7 +684,18 @@ impl bitstruct::FromRaw<u8, FileType> for Mode {
 
 impl bitstruct::IntoRaw<u8, FileType> for Mode {
     fn into_raw(bits: FileType) -> u8 {
-        bits as u8
+        match bits {
+            FileType::Fifo => IFIFO,
+            FileType::Char => IFCHR,
+            FileType::Dir => IFDIR,
+            FileType::Block => IFBLK,
+            FileType::Regular => IFREG,
+            FileType::SymLink => IFLNK,
+            FileType::ShadowInode => IFSHAD,
+            FileType::Sock => IFSOCK,
+            FileType::AttrDir => IFATTRDIR,
+            FileType::Unused => 0,
+        }
     }
 }
 
@@ -709,18 +737,21 @@ impl fmt::Debug for Mode {
 /// An in-memory representation of an inode, that associates the
 /// inode with the underlying filesystem it came from and its
 /// inode number in that filesystem.
-pub struct Inode<'a> {
+#[derive(Clone)]
+pub struct Inode {
     pub dinode: DInode,
     pub ino: u32,
-    pub fs: &'a FileSystem<'a>,
+    pub fs: FileSystem,
 }
 
-impl<'a> Inode<'a> {
+impl Inode {
     /// Returns a new inode from the given filesystem.
-    pub fn new(fs: &'a FileSystem<'a>, ino: u32) -> Result<Inode<'a>> {
-        let inoff = fs.sb.inode_offset(ino);
-        let p = fs.sd.as_ptr().wrapping_add(inoff).cast::<DInode>();
+    pub fn new(fs: &FileSystem, ino: u32) -> Result<Inode> {
+        let inoff = fs.inode_offset(ino);
+        let src = fs.subset(inoff, mem::size_of::<DInode>());
+        let p = src.as_ptr().cast::<DInode>();
         let dinode = unsafe { ptr::read_unaligned(p) };
+        let fs = fs.clone();
         Ok(Inode { dinode, ino, fs })
     }
 
@@ -769,17 +800,10 @@ impl<'a> Inode<'a> {
         let n = core::cmp::min(buf.len(), self.size() - off);
         let mut nread = 0;
         while nread < n {
-            let frag_off: usize = off % fragsize;
+            let frag_off = off % fragsize;
             let m = cmp::min(n - nread, fragsize - frag_off);
-            match self.bmap(off as u64)? {
-                Block::Hole => {
-                    buf[nread..nread + m].fill(0);
-                }
-                Block::Sd(bs) => {
-                    buf[nread..nread + m]
-                        .copy_from_slice(&bs[frag_off..frag_off + m]);
-                }
-            }
+            let block = self.bmap(off as u64)?;
+            block.read(frag_off, &mut buf[nread..nread + m]);
             off += m;
             nread += m;
         }
@@ -789,12 +813,12 @@ impl<'a> Inode<'a> {
     /// Maps a byte offset in some file into a fragment-sized block
     /// from the the storage device.
     fn bmap(&self, off: u64) -> Result<Block> {
-        let fs = self.fs;
-        let lbn = fs.logical_blockno(off);
+        let fs = &self.fs;
+        let lbn = self.fs.logical_blockno(off);
         if lbn < NDADDR {
             let sdbn = self.dinode.dblocks[lbn] as usize;
             let offset = (sdbn + fs.logical_block_fragno(off)) * fs.fragsize();
-            return Ok(Block::Sd(&fs.sd[offset..offset + fs.fragsize()]));
+            return Ok(Block::Sd(fs.subset(offset, fs.fragsize())));
         }
         let mut lbn = lbn - NDADDR;
         let mut indir_span = 1;
@@ -820,7 +844,9 @@ impl<'a> Inode<'a> {
             indir_span /= fs.indir_span_per_block();
             let dboff = (lbn / indir_span) % fs.indir_span_per_block();
             let dbaddr = dblockno * DEV_BLOCK_SIZE + dboff * 4;
-            let bs = &fs.sd[dbaddr..dbaddr + 4];
+            let bs = unsafe {
+                core::ptr::read::<[u8; 4]>(fs.subset(dbaddr, 4).as_ptr().cast())
+            };
             nb = u32::from_ne_bytes([bs[0], bs[1], bs[2], bs[3]]);
             if nb == 0 {
                 return Ok(Block::Hole);
@@ -828,7 +854,7 @@ impl<'a> Inode<'a> {
         }
         let sdbn = nb as usize;
         let offset = (sdbn + fs.logical_block_fragno(off)) * fs.fragsize();
-        Ok(Block::Sd(&self.fs.sd[offset..offset + fs.fragsize()]))
+        Ok(Block::Sd(self.fs.subset(offset, fs.fragsize())))
     }
 
     pub fn mode(&self) -> Mode {
@@ -836,12 +862,79 @@ impl<'a> Inode<'a> {
     }
 }
 
-impl fmt::Debug for Inode<'_> {
+impl fmt::Debug for Inode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_fmt(format_args!("INODE: {} ({:?})\n", self.ino, self.mode()))?;
         f.write_fmt(format_args!("{:#x?}", self.dinode))?;
         Ok(())
     }
+}
+
+impl io::Read for Inode {
+    fn read(&self, offset: u64, dst: &mut [u8]) -> Result<usize> {
+        self.read(offset, dst)
+    }
+
+    fn size(&self) -> usize {
+        self.size()
+    }
+}
+
+impl ramdisk::File for Inode {
+    fn file_type(&self) -> FileType {
+        self.file_type()
+    }
+}
+
+impl ramdisk::FileSystem for FileSystem {
+    fn open(&self, path: &str) -> Result<Box<dyn ramdisk::File>> {
+        Ok(Box::new(self.namei(path.as_bytes())?))
+    }
+
+    fn list(&self, path: &str) -> Result<()> {
+        list(self, path, self.namei(path.as_bytes())?)
+    }
+
+    fn as_str(&self) -> &str {
+        "UFS"
+    }
+
+    fn with_addr(&self, addr: usize) -> *const u8 {
+        self.data().with_addr(addr)
+    }
+}
+
+/// Lists a file, in a manner similar to `ls`.
+pub fn list(fs: &FileSystem, path: &str, file: Inode) -> Result<()> {
+    if file.file_type() == FileType::Dir {
+        lsdir(fs, &Directory::new(file));
+    } else {
+        lsfile(&file, path.as_bytes());
+    }
+    Ok(())
+}
+
+fn lsdir(fs: &FileSystem, dir: &Directory) {
+    for dentry in dir.iter() {
+        let ino = dentry.ino();
+        match fs.inode(ino) {
+            Ok(file) => lsfile(&file, dentry.name()),
+            Err(e) => println!("ls: failed dir ent for ino #{ino}: {e:?}"),
+        }
+    }
+}
+
+fn lsfile(file: &Inode, name: &[u8]) {
+    println!(
+        "#{ino:<4} {mode:?} {nlink:<2} {uid:<3} {gid:<3} {size:>8} {name}",
+        mode = file.mode(),
+        ino = file.ino(),
+        nlink = file.nlink(),
+        uid = file.uid(),
+        gid = file.gid(),
+        size = file.size(),
+        name = unsafe { core::str::from_utf8_unchecked(name) }
+    );
 }
 
 mod dir;

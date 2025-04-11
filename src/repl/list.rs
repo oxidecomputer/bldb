@@ -15,6 +15,6 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
         return Err(Error::BadArgs);
     };
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
-    ramdisk::list(fs, &path)?;
+    ramdisk::list(fs.as_ref(), &path)?;
     Ok(Value::Nil)
 }

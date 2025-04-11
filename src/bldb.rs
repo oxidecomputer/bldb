@@ -47,7 +47,6 @@ use crate::mmu;
 use crate::ramdisk;
 use crate::result::Error;
 use crate::uart::{self, Uart};
-use crate::ufs;
 use alloc::boxed::Box;
 use core::fmt;
 use core::ops::Range;
@@ -63,13 +62,13 @@ pub(crate) struct Config {
     pub(crate) gpios: &'static mut gpio::Gpios,
     pub(crate) loader_region: Range<mem::V4KA>,
     pub(crate) page_table: mmu::LoaderPageTable,
-    pub(crate) ramdisk: Option<ufs::FileSystem<'static>>,
+    pub(crate) ramdisk: Option<Box<dyn ramdisk::FileSystem>>,
     pub(crate) prompt: cons::Prompt,
 }
 
 impl Config {
     pub fn mount(&mut self, ramdisk: &'static [u8]) -> Result<(), Error> {
-        self.ramdisk = ramdisk::mount(ramdisk)?;
+        self.ramdisk = Some(ramdisk::mount(ramdisk)?);
         Ok(())
     }
 }
@@ -87,7 +86,7 @@ impl fmt::Debug for Config {
         writeln!(
             f,
             "    ramdisk: {:?}",
-            self.ramdisk.as_ref().map(|_| "mounted")
+            self.ramdisk.as_ref().map(|fs| fs.as_str())
         )?;
         writeln!(f, "    prompt: {:?}", self.prompt)?;
         write!(f, "}}")

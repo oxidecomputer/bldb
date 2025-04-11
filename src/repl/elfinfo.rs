@@ -5,7 +5,6 @@
 use crate::bldb;
 use crate::loader;
 use crate::println;
-use crate::ramdisk;
 use crate::repl::{self, Value};
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
@@ -17,7 +16,7 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
     };
     let path = repl::popenv(env).as_string().map_err(usage)?;
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
-    let kernel = ramdisk::open(fs, &path)?;
-    loader::elfinfo(&kernel)?;
+    let kernel = fs.open(&path)?;
+    loader::elfinfo(kernel.as_ref())?;
     Ok(Value::Nil)
 }

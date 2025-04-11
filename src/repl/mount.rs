@@ -8,6 +8,11 @@ use crate::repl::{self, Value};
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
 
+pub fn umount(config: &mut bldb::Config, _env: &mut [Value]) -> Result<Value> {
+    config.ramdisk = None;
+    Ok(Value::Nil)
+}
+
 pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
     let usage = |error| {
         println!("usage: mount <ramdisk addr>,<ramdisk len>");

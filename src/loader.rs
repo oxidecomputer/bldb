@@ -7,11 +7,12 @@
 
 extern crate alloc;
 
+use crate::io::Read;
 use crate::mem;
 use crate::mmu::LoaderPageTable;
 use crate::println;
+use crate::ramdisk::File;
 use crate::result::{Error, Result};
-use crate::ufs;
 use alloc::vec::Vec;
 use goblin::container::{Container, Ctx, Endian};
 use goblin::elf::ProgramHeader;
@@ -20,37 +21,12 @@ use goblin::elf::{self, Elf};
 
 const PAGE_SIZE: usize = 4096;
 
-pub(crate) trait Read {
-    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize>;
-}
-
-impl Read for ufs::Inode<'_> {
-    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize> {
-        self.read(off, dst).map_err(|_| Error::FsRead)
-    }
-}
-
-impl Read for &[u8] {
-    fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize> {
-        let off = off as usize;
-        if off > self.len() {
-            return Err(Error::ElfTruncatedObj);
-        }
-        let bytes = &self[off..];
-        let len = usize::min(bytes.len(), dst.len());
-        if len > 0 {
-            dst[..len].copy_from_slice(&bytes[..len]);
-        }
-        Ok(0)
-    }
-}
-
 /// Loads an executable image contained in the given file
 /// creating virtual mappings as required.  Returns the image's
 /// ELF entry point on success.
 pub(crate) fn load(
     page_table: &mut LoaderPageTable,
-    file: &ufs::Inode<'_>,
+    file: &dyn File,
 ) -> Result<u64> {
     let mut buf = [0u8; PAGE_SIZE];
     file.read(0, &mut buf).map_err(|_| Error::FsRead)?;
@@ -88,7 +64,7 @@ pub(crate) fn load_bytes(
     Ok(elf.entry)
 }
 
-pub(crate) fn elfinfo<T: Read>(file: &T) -> Result<()> {
+pub(crate) fn elfinfo(file: &dyn File) -> Result<()> {
     use goblin::elf;
 
     let mut buf = [0u8; PAGE_SIZE];
@@ -193,7 +169,7 @@ fn parse_program_headers(
 
 /// Loads the given ELF segment, creating virtual mappings for
 /// it as required.
-fn load_segment<T: Read>(
+fn load_segment<T: Read + ?Sized>(
     page_table: &mut LoaderPageTable,
     segment: &ProgramHeader,
     file: &T,
@@ -226,8 +202,8 @@ fn load_segment<T: Read>(
         };
         let filesz = segment.p_filesz as usize;
         let len = usize::min(filesz, dst.len());
-        if len > 0 {
-            file.read(segment.p_offset, &mut dst[..len])?;
+        if len > 0 && file.read(segment.p_offset, &mut dst[..len])? != len {
+            return Err(Error::ElfTruncatedObj);
         }
     }
     let attrs = mem::Attrs::new_kernel(

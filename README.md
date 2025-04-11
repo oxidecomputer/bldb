@@ -118,7 +118,8 @@ Supported commands include:
 * `inflate <src addr>,<src len> [<dst addr>,<dst len>]`
   decompresses the a ZLIB compressed slice from the given
   source to the given destination.
-* `mount <addr,len>` to mount the UFS ramdisk.
+* `mount <addr,len>` to mount a UFS ramdisk or cpio miniroot.
+* `umount` to unmount the ramdisk.
 * `ls <file>` to list a file or directory on the ramdisk.
 * `cat <file>` to display the contents of a file.
 * `copy <file> <dst addr>,<dst len>` to copy the contents of a
