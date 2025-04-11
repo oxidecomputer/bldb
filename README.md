@@ -208,10 +208,14 @@ Supported commands include:
   extended configuration space for the given bus/device/function
 * `ecamwr <b/d/f> <offset> <value>` writes a 32-bit word to PCIe
   extended configuration space for the given bus/device/function
-* `getbits <start>,<end> <value>` returns  the given bit range
+* `getbits <start>,<end> <value>` returns the given bit range
   from `<value>`
 * `setbits <start>,<end> <new bits> <value>` sets the given bit
   range in `<value>` to `<new bits>`
+* `spinner` displays a moving "spinner" on the terminal until a
+  byte is received on the UART.  The `pulser` and `throbber`
+  commands do essentially the same thing, with a different
+  character pattern.
 
 ## Building bldb
 

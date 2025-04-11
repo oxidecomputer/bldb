@@ -486,7 +486,8 @@ impl Uart {
 
     pub fn try_getb(&mut self) -> Result<u8> {
         while {
-            let lsr = unsafe { ptr::read_volatile(&self.read_mmio_mut().lsr) };
+            let lsr: Lsr =
+                unsafe { ptr::read_volatile(&self.read_mmio_mut().lsr) };
             if lsr.break_intr() {
                 return Err(Error::UartBreak);
             }
@@ -505,6 +506,39 @@ impl Uart {
         }
         let data = unsafe { ptr::read_volatile(&self.read_mmio_mut().rbr) };
         Ok(data.data())
+    }
+
+    pub fn try_getb_timeout(
+        &mut self,
+        timeout: core::time::Duration,
+    ) -> Result<u8> {
+        use crate::clock;
+        let ns = timeout.as_nanos();
+        let cycles = ns * clock::frequency() / clock::NANOS_PER_SEC;
+        let start = u128::from(clock::rdtsc());
+        let end = u64::try_from(start.checked_add(cycles).unwrap()).unwrap();
+        while clock::rdtsc() < end {
+            let lsr = unsafe { ptr::read_volatile(&self.read_mmio_mut().lsr) };
+            if lsr.break_intr() {
+                return Err(Error::UartBreak);
+            }
+            if lsr.overrun_err() {
+                return Err(Error::UartFifoOverrun);
+            }
+            if lsr.framing_err() {
+                return Err(Error::UartFraming);
+            }
+            if lsr.parity_err() {
+                return Err(Error::UartParity);
+            }
+            if !lsr.data_ready() {
+                hint::spin_loop();
+                continue;
+            }
+            let data = unsafe { ptr::read_volatile(&self.read_mmio_mut().rbr) };
+            return Ok(data.data());
+        }
+        Err(Error::Timeout)
     }
 
     pub fn getb(&mut self) -> u8 {

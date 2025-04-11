@@ -399,6 +399,10 @@ Supported commands include:
   from `<value>`
 * `setbits <start>,<end> <new bits> <value>` sets the given bit
   range in `<value>` to `<new bits>`
+* `spinner` displays a moving "spinner" on the terminal until a
+  byte is received on the UART.  The `pulser` and `throbber`
+  commands do essentially the same thing, with a different
+  character pattern.
 "#
     );
 }
