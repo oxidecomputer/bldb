@@ -5,35 +5,43 @@
 //! Simple hex dump routine.
 
 use crate::bldb;
+use crate::io::Read;
 use crate::mem;
 use crate::repl::{self, Value};
 use crate::result::{Error, Result};
 use crate::{print, println};
 use alloc::vec::Vec;
 use core::ptr;
+use core::slice;
 
-pub unsafe fn hexdump(mut addr: *const u8, mut len: usize) {
+fn hexdump<T: Read + ?Sized>(mut addr: usize, src: &T) -> Result<()> {
     println!(
         "Dumping {s:#016x}..{e:#016x}",
-        s = addr.addr(),
-        e = addr.addr().wrapping_add(len)
+        s = addr,
+        e = addr.wrapping_add(src.size())
     );
     const PAD: &str = "";
+    let mut len = src.size();
+    let mut offset = 0;
     while len > 0 {
-        let base = addr.mask(!0b1111).addr();
-        let start = addr.addr() - base;
+        let base = addr & !0b1111;
+        let start = addr - base;
         let clen = usize::min(16 - start, len);
 
         print!("0x{base:016x}:");
         print!("{PAD:>pad$}", pad = start * 3);
+        let mut b = 0u8;
         for k in 0..clen {
-            print!(" {:02x}", unsafe { ptr::read(addr.wrapping_add(k)) });
+            let off = offset + k;
+            src.read(off as u64, slice::from_mut(&mut b))?;
+            print!(" {:02x}", b);
         }
         print!("{PAD:>pad$}", pad = (16 - (clen + start)) * 3);
         print!("{PAD:>start$}");
         print!(" [");
         for k in 0..clen {
-            let b = unsafe { ptr::read(addr.wrapping_add(k)) };
+            let off = offset + k;
+            src.read(off as u64, slice::from_mut(&mut b))?;
             if b.is_ascii_graphic() || b == b' ' {
                 print!("{b}", b = b as char);
             } else {
@@ -42,8 +50,48 @@ pub unsafe fn hexdump(mut addr: *const u8, mut len: usize) {
         }
         println!("]");
         addr = addr.wrapping_add(clen);
+        offset = offset.wrapping_add(clen);
         len -= clen;
     }
+    Ok(())
+}
+
+fn xdfile(config: &bldb::Config, path: &str) -> Result<()> {
+    let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
+    let file = fs.open(path)?;
+    hexdump(0, file.as_ref())
+}
+
+struct PtrLenPair(*const u8, usize);
+
+impl Read for PtrLenPair {
+    fn read(&self, offset: u64, dst: &mut [u8]) -> Result<usize> {
+        use core::cmp;
+        let &PtrLenPair(ptr, len) = self;
+        let offset = offset.try_into().unwrap();
+        if offset >= len {
+            return Err(Error::Offset);
+        }
+        let ptr = ptr.wrapping_add(offset);
+        let len = cmp::min(dst.len(), len - offset);
+        unsafe {
+            ptr::copy(ptr, dst.as_mut_ptr(), len);
+        }
+        Ok(len)
+    }
+
+    fn size(&self) -> usize {
+        let &PtrLenPair(_, len) = self;
+        len
+    }
+}
+
+unsafe fn xdmem(config: &bldb::Config, arg: Value) -> Result<()> {
+    let (ptr, len) =
+        arg.as_ptr_len().and_then(|(ptr, len)| check_pair(config, ptr, len))?;
+    let pair = PtrLenPair(ptr, len);
+    let addr = ptr.addr();
+    hexdump(addr, &pair)
 }
 
 pub fn xd(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
@@ -51,13 +99,13 @@ pub fn xd(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
         println!("usage: xd <addr>,<len>");
         error
     };
-    let (ptr, len) = repl::popenv(env)
-        .as_ptr_len()
-        .and_then(|(ptr, len)| check_pair(config, ptr, len))
-        .map_err(usage)?;
-    unsafe {
-        hexdump(ptr, len);
+    let val = repl::popenv(env);
+    if let Value::Str(path) = val {
+        xdfile(config, &path)
+    } else {
+        unsafe { xdmem(config, val) }
     }
+    .map_err(usage)?;
     Ok(Value::Nil)
 }
 
