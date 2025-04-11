@@ -9,6 +9,28 @@ use crate::repl::{self, Value};
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
 
+pub fn loadcpio(
+    config: &mut bldb::Config,
+    env: &mut Vec<Value>,
+) -> Result<Value> {
+    let usage = |error| {
+        println!("usage: loadcpio <src addr>,<len> <path>");
+        error
+    };
+    let cpio = repl::popenv(env)
+        .as_slice(&config.page_table, 0)
+        .and_then(|o| o.ok_or(Error::BadArgs))
+        .map_err(usage)?;
+    let path = repl::popenv(env).as_string().map_err(usage)?;
+    let src = cpio_reader::iter_files(cpio)
+        .find(|entry| entry.name() == path)
+        .ok_or(Error::CpioNoFile)?
+        .file();
+    let entry = loader::load_bytes(&mut config.page_table, src)?;
+    let entry = entry.try_into().unwrap();
+    Ok(Value::Pointer(src.as_ptr().with_addr(entry).cast_mut()))
+}
+
 pub fn loadmem(
     config: &mut bldb::Config,
     env: &mut Vec<Value>,
@@ -27,15 +49,14 @@ pub fn loadmem(
 }
 
 pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
-    use crate::ramdisk;
     let usage = |error| {
         println!("usage: load <path>");
         error
     };
     let path = repl::popenv(env).as_string().map_err(usage)?;
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
-    let kernel = ramdisk::open(fs, &path)?;
-    let entry = loader::load(&mut config.page_table, &kernel)?;
+    let kernel = fs.open(&path)?;
+    let entry = loader::load(&mut config.page_table, kernel.as_ref())?;
     let entry = entry.try_into().unwrap();
-    Ok(Value::Pointer(fs.data().with_addr(entry).cast_mut()))
+    Ok(Value::Pointer(fs.as_ref().with_addr(entry).cast_mut()))
 }

@@ -20,6 +20,6 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
         .as_slice_mut(&config.page_table, 0)
         .and_then(|o| o.ok_or(Error::BadArgs))
         .map_err(usage)?;
-    let len = ramdisk::copy(fs, &path, dst)?;
+    let len = ramdisk::copy(fs.as_ref(), &path, dst)?;
     Ok(Value::Slice(&dst[..len]))
 }

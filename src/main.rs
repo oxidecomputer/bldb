@@ -21,6 +21,7 @@ mod cons;
 mod cpuid;
 mod gpio;
 mod idt;
+mod io;
 mod iomux;
 mod loader;
 mod mem;

@@ -34,6 +34,6 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
         }
     };
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
-    let hash = ramdisk::sha256(fs, &path)?;
+    let hash = ramdisk::sha256(fs.as_ref(), &path)?;
     Ok(Value::Sha256(hash))
 }
