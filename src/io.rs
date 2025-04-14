@@ -4,6 +4,11 @@
 
 use crate::result::Result;
 
+/// A "Storage Device" that represents the memory allocated to
+/// a ramdisk.
+///
+/// This is essentially a destructured slice, which we introduce
+/// to work around some lifetime issues.
 #[derive(Debug)]
 pub(crate) struct Sd {
     pub(crate) ptr: *const u8,
@@ -11,15 +16,26 @@ pub(crate) struct Sd {
 }
 
 impl Sd {
-    pub(crate) fn new(ptr: *const u8, len: usize) -> Sd {
+    pub(crate) unsafe fn new(ptr: *const u8, len: usize) -> Sd {
         Sd { ptr, len }
     }
 
-    pub(crate) fn from_slice(bs: &[u8]) -> Sd {
-        Sd::new(bs.as_ptr(), bs.len())
+    /// Creates a new `Sd` from a slice.
+    ///
+    /// # Safety
+    /// It is up to the caller to ensure that the data in `bs`
+    /// is not moved or dropped while this `Sd`, or any other
+    /// derived from it, is alive.
+    pub(crate) unsafe fn from_slice(bs: &[u8]) -> Sd {
+        unsafe { Sd::new(bs.as_ptr(), bs.len()) }
     }
 
-    pub(crate) fn as_ptr(&self) -> *const u8 {
+    /// Reconstitutes this `Sd`` into a slice
+    pub(crate) unsafe fn as_slice(&self) -> &[u8] {
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
+    }
+
+    pub(crate) fn data(&self) -> *const u8 {
         self.ptr
     }
 
@@ -42,7 +58,7 @@ pub(crate) trait Read {
 impl Read for &[u8] {
     fn read(&self, off: u64, dst: &mut [u8]) -> Result<usize> {
         let off = off as usize;
-        if off > self.len() {
+        if off >= self.len() {
             return Ok(0);
         }
         let bytes = &self[off..];

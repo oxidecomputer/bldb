@@ -27,8 +27,7 @@ pub fn loadcpio(
         .ok_or(Error::CpioNoFile)?
         .file();
     let entry = loader::load_bytes(&mut config.page_table, src)?;
-    let entry = entry.try_into().unwrap();
-    Ok(Value::Pointer(src.as_ptr().with_addr(entry).cast_mut()))
+    Ok(Value::Pointer(entry.cast_mut()))
 }
 
 pub fn loadmem(
@@ -44,8 +43,8 @@ pub fn loadmem(
         .and_then(|o| o.ok_or(Error::BadArgs))
         .map_err(usage)?;
     let entry = loader::load_bytes(&mut config.page_table, src)?;
-    let entry = entry.try_into().unwrap();
-    Ok(Value::Pointer(src.as_ptr().with_addr(entry).cast_mut()))
+    crate::println!("Loaded ELF object from memory: entry point {entry:p}");
+    Ok(Value::Pointer(entry.cast_mut()))
 }
 
 pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
@@ -56,7 +55,7 @@ pub fn run(config: &mut bldb::Config, env: &mut Vec<Value>) -> Result<Value> {
     let path = repl::popenv(env).as_string().map_err(usage)?;
     let fs = config.ramdisk.as_ref().ok_or(Error::FsNoRoot)?;
     let kernel = fs.open(&path)?;
-    let entry = loader::load(&mut config.page_table, kernel.as_ref())?;
-    let entry = entry.try_into().unwrap();
-    Ok(Value::Pointer(fs.as_ref().with_addr(entry).cast_mut()))
+    let entry = loader::load_file(&mut config.page_table, kernel.as_ref())?;
+    crate::println!("Loaded ELF file: entry point {entry:p}");
+    Ok(Value::Pointer(entry.cast_mut()))
 }

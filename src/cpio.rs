@@ -9,7 +9,6 @@ use crate::ramdisk;
 use crate::result::{Error, Result};
 use crate::{print, println};
 use alloc::boxed::Box;
-use core::slice;
 
 pub(crate) struct FileSystem {
     sd: io::Sd,
@@ -18,7 +17,7 @@ pub(crate) struct FileSystem {
 impl FileSystem {
     pub(crate) fn try_new(bs: &[u8]) -> Result<FileSystem> {
         if bs.starts_with(b"070707") {
-            let sd = io::Sd::from_slice(bs);
+            let sd = unsafe { io::Sd::from_slice(bs) };
             Ok(FileSystem { sd })
         } else {
             Err(Error::FsInvMagic)
@@ -30,14 +29,6 @@ pub(crate) struct File {
     data: io::Sd,
 }
 
-impl File {
-    fn as_slice(&self) -> &[u8] {
-        let ptr = self.data.as_ptr();
-        let len = self.data.len();
-        unsafe { slice::from_raw_parts(ptr, len) }
-    }
-}
-
 impl ramdisk::File for File {
     fn file_type(&self) -> ramdisk::FileType {
         ramdisk::FileType::Regular
@@ -46,7 +37,7 @@ impl ramdisk::File for File {
 
 impl io::Read for File {
     fn read(&self, offset: u64, dst: &mut [u8]) -> Result<usize> {
-        let s = self.as_slice();
+        let s = unsafe { self.data.as_slice() };
         s.read(offset, dst)
     }
 
@@ -57,13 +48,11 @@ impl io::Read for File {
 
 impl ramdisk::FileSystem for FileSystem {
     fn open(&self, path: &str) -> Result<Box<dyn ramdisk::File>> {
-        let ptr: *const u8 = self.sd.as_ptr();
-        let len = self.sd.len();
-        let cpio = unsafe { core::slice::from_raw_parts(ptr, len) };
+        let cpio = unsafe { self.sd.as_slice() };
         let key = path.strip_prefix("/").unwrap_or(path);
         for file in cpio_reader::iter_files(cpio) {
             if file.name() == key {
-                let data = io::Sd::from_slice(file.file());
+                let data = unsafe { io::Sd::from_slice(file.file()) };
                 return Ok(Box::new(File { data }));
             }
         }
@@ -71,9 +60,7 @@ impl ramdisk::FileSystem for FileSystem {
     }
 
     fn list(&self, path: &str) -> Result<()> {
-        let ptr: *const u8 = self.sd.as_ptr();
-        let len = self.sd.len();
-        let cpio = unsafe { core::slice::from_raw_parts(ptr, len) };
+        let cpio = unsafe { self.sd.as_slice() };
         let key = path.strip_prefix('/').unwrap_or(path);
         for file in cpio_reader::iter_files(cpio) {
             if file.name() == key {
@@ -93,10 +80,6 @@ impl ramdisk::FileSystem for FileSystem {
 
     fn as_str(&self) -> &str {
         "cpio"
-    }
-
-    fn with_addr(&self, addr: usize) -> *const u8 {
-        self.sd.as_ptr().with_addr(addr)
     }
 }
 
