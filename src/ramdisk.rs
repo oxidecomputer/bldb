@@ -41,7 +41,6 @@ pub trait FileSystem {
     fn open(&self, path: &str) -> Result<Box<dyn File>>;
     fn list(&self, path: &str) -> Result<()>;
     fn as_str(&self) -> &str;
-    fn with_addr(&self, addr: usize) -> *const u8;
 }
 
 pub fn mount(ramdisk: &'static [u8]) -> Result<Box<dyn FileSystem>> {

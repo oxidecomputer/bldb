@@ -14,6 +14,7 @@ use crate::println;
 use crate::ramdisk::File;
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
+use core::ptr;
 use goblin::container::{Container, Ctx, Endian};
 use goblin::elf::ProgramHeader;
 use goblin::elf::program_header::PT_LOAD;
@@ -24,22 +25,14 @@ const PAGE_SIZE: usize = 4096;
 /// Loads an executable image contained in the given file
 /// creating virtual mappings as required.  Returns the image's
 /// ELF entry point on success.
-pub(crate) fn load(
+pub(crate) fn load_file(
     page_table: &mut LoaderPageTable,
     file: &dyn File,
-) -> Result<u64> {
+) -> Result<*const u8> {
     let mut buf = [0u8; PAGE_SIZE];
     file.read(0, &mut buf).map_err(|_| Error::FsRead)?;
     let elf = parse_elf(&buf)?;
-    for segment in elf.program_headers.iter().filter(|&h| h.p_type == PT_LOAD) {
-        let file_range = segment.file_range();
-        if file.size() < file_range.end {
-            return Err(Error::ElfTruncatedObj);
-        }
-        load_segment(page_table, segment, file)?;
-    }
-    crate::println!("Loaded ELF file: entry point {:#x?}", elf.entry);
-    Ok(elf.entry)
+    load(page_table, &elf, file)
 }
 
 /// Loads an executable image contained in the given byte slice,
@@ -48,25 +41,34 @@ pub(crate) fn load(
 pub(crate) fn load_bytes(
     page_table: &mut LoaderPageTable,
     bytes: &[u8],
-) -> Result<u64> {
+) -> Result<*const u8> {
     let elf = parse_elf(bytes)?;
-    for section in elf.program_headers.iter().filter(|&h| h.p_type == PT_LOAD) {
-        let file_range = section.file_range();
-        if bytes.len() < file_range.end {
+    load(page_table, &elf, &bytes)
+}
+
+fn load(
+    page_table: &mut LoaderPageTable,
+    elf: &Elf<'_>,
+    file: &dyn Read,
+) -> Result<*const u8> {
+    let mut entry = ptr::null();
+    let elfentry = elf.entry.try_into().unwrap();
+    for segment in elf.program_headers.iter().filter(|&h| h.p_type == PT_LOAD) {
+        let file_range = segment.file_range();
+        if file.size() < file_range.end {
             return Err(Error::ElfTruncatedObj);
         }
-        load_segment(page_table, section, &bytes)?;
+        let (base, len) = load_segment(page_table, segment, file)?;
+        let addr = base.addr();
+        let mem_range = addr..addr + len;
+        if mem_range.contains(&elfentry) {
+            entry = base.with_addr(elfentry);
+        }
     }
-    crate::println!(
-        "Loaded ELF object from memory: entry point {:#x?}",
-        elf.entry
-    );
-    Ok(elf.entry)
+    Ok(entry)
 }
 
 pub(crate) fn elfinfo(file: &dyn File) -> Result<()> {
-    use goblin::elf;
-
     let mut buf = [0u8; PAGE_SIZE];
     file.read(0, &mut buf).map_err(|_| Error::FsRead)?;
     let elf = parse_elf(&buf)?;
@@ -173,7 +175,7 @@ fn load_segment<T: Read + ?Sized>(
     page_table: &mut LoaderPageTable,
     segment: &ProgramHeader,
     file: &T,
-) -> Result<()> {
+) -> Result<(*mut u8, usize)> {
     let pa = segment.p_paddr;
     if pa % mem::P4KA::ALIGN != 0 {
         return Err(Error::ElfSegPAlign);
@@ -190,21 +192,21 @@ fn load_segment<T: Read + ?Sized>(
     }
     let start = mem::V4KA::new(vm.start);
     let end = mem::V4KA::new(mem::round_up_4k(vm.end));
+    let len = end.addr() - start.addr();
     let region = start..end;
     let pa = mem::P4KA::new(pa);
-    {
-        let dst = unsafe {
-            page_table.map_ram(region.clone(), mem::Attrs::new_data(), pa)?;
-            let p = page_table.try_with_addr(start.addr())?;
-            let len = end.addr() - start.addr();
-            core::ptr::write_bytes(p, 0, len);
-            core::slice::from_raw_parts_mut(p, len)
-        };
-        let filesz = segment.p_filesz as usize;
-        let len = usize::min(filesz, dst.len());
-        if len > 0 && file.read(segment.p_offset, &mut dst[..len])? != len {
-            return Err(Error::ElfTruncatedObj);
-        }
+    unsafe {
+        page_table.map_ram(region.clone(), mem::Attrs::new_data(), pa)?;
+    }
+    let p: *mut u8 = page_table.try_with_addr(start.addr())?;
+    let dst = unsafe {
+        core::ptr::write_bytes(p, 0, len);
+        core::slice::from_raw_parts_mut(p, len)
+    };
+    let filesz = segment.p_filesz as usize;
+    let ncp = usize::min(filesz, dst.len());
+    if ncp > 0 && file.read(segment.p_offset, &mut dst[..ncp])? != ncp {
+        return Err(Error::ElfTruncatedObj);
     }
     let attrs = mem::Attrs::new_kernel(
         segment.is_read(),
@@ -214,5 +216,5 @@ fn load_segment<T: Read + ?Sized>(
     unsafe {
         page_table.map_ram(region, attrs, pa)?;
     }
-    Ok(())
+    Ok((p, len))
 }

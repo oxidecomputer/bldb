@@ -443,7 +443,7 @@ pub struct FileSystem(Rc<InnerFileSystem>);
 impl FileSystem {
     pub fn new(sd: &[u8]) -> Result<FileSystem> {
         let sb = SuperBlock::read(sd)?;
-        let sd = io::Sd::from_slice(sd);
+        let sd = unsafe { io::Sd::from_slice(sd) };
         Ok(FileSystem(Rc::new(InnerFileSystem { sd, sb })))
     }
 
@@ -569,12 +569,6 @@ impl FileSystem {
     fn subset(&self, offset: usize, len: usize) -> io::Sd {
         self.0.sd.subset(offset, len)
     }
-
-    /// Returns a pointer to the data area.
-    /// Used for exposing provenance.
-    pub fn data(&self) -> *const u8 {
-        self.0.sd.as_ptr()
-    }
 }
 
 /// A logical "block" of data from the disk.
@@ -583,20 +577,23 @@ impl FileSystem {
 /// spans of bytes within a file that are all zeroes are
 /// specially marked, and not backed by allocated blocks.
 enum Block {
-    Hole,
+    Hole(usize),
     Sd(io::Sd),
 }
 
 impl Block {
-    fn read(&self, offset: usize, dst: &mut [u8]) {
+    fn read(&self, offset: usize, dst: &mut [u8]) -> usize {
         match self {
-            Self::Hole => dst.fill(0),
+            &Self::Hole(size) => {
+                assert!(offset < size);
+                let count = cmp::min(size - offset, dst.len());
+                dst[..count].fill(0);
+                count
+            }
             Self::Sd(sd) => {
-                let ptr = sd.as_ptr();
+                let ptr = sd.data();
                 let len = sd.len();
-                if offset >= len {
-                    return;
-                }
+                assert!(offset < len);
                 let count = cmp::min(dst.len(), len - offset);
                 unsafe {
                     ptr::copy(
@@ -605,6 +602,7 @@ impl Block {
                         count,
                     );
                 }
+                count
             }
         }
     }
@@ -749,7 +747,7 @@ impl Inode {
     pub fn new(fs: &FileSystem, ino: u32) -> Result<Inode> {
         let inoff = fs.inode_offset(ino);
         let src = fs.subset(inoff, mem::size_of::<DInode>());
-        let p = src.as_ptr().cast::<DInode>();
+        let p = src.data().cast::<DInode>();
         let dinode = unsafe { ptr::read_unaligned(p) };
         let fs = fs.clone();
         Ok(Inode { dinode, ino, fs })
@@ -789,7 +787,7 @@ impl Inode {
 
     /// Reads from an inode.
     pub fn read(&self, off: u64, buf: &mut [u8]) -> Result<usize> {
-        let mut off = off as usize;
+        let off = off as usize;
         if off > MAX_OFFSET {
             return Err(Error::FsOffset);
         }
@@ -800,12 +798,8 @@ impl Inode {
         let n = core::cmp::min(buf.len(), self.size() - off);
         let mut nread = 0;
         while nread < n {
-            let frag_off = off % fragsize;
-            let m = cmp::min(n - nread, fragsize - frag_off);
-            let block = self.bmap(off as u64)?;
-            block.read(frag_off, &mut buf[nread..nread + m]);
-            off += m;
-            nread += m;
+            let block = self.bmap((nread + off).try_into().unwrap())?;
+            nread += block.read(off % fragsize, &mut buf[nread..]);
         }
         Ok(n)
     }
@@ -839,17 +833,17 @@ impl Inode {
         for _ in 0..=indir_depth {
             let dblockno = fs.frags_to_sdblock(nb as usize);
             if dblockno == 0 {
-                return Ok(Block::Hole);
+                return Ok(Block::Hole(fs.fragsize()));
             }
             indir_span /= fs.indir_span_per_block();
             let dboff = (lbn / indir_span) % fs.indir_span_per_block();
             let dbaddr = dblockno * DEV_BLOCK_SIZE + dboff * 4;
             let bs = unsafe {
-                core::ptr::read::<[u8; 4]>(fs.subset(dbaddr, 4).as_ptr().cast())
+                core::ptr::read::<[u8; 4]>(fs.subset(dbaddr, 4).data().cast())
             };
             nb = u32::from_ne_bytes([bs[0], bs[1], bs[2], bs[3]]);
             if nb == 0 {
-                return Ok(Block::Hole);
+                return Ok(Block::Hole(fs.fragsize()));
             }
         }
         let sdbn = nb as usize;
@@ -897,10 +891,6 @@ impl ramdisk::FileSystem for FileSystem {
 
     fn as_str(&self) -> &str {
         "UFS"
-    }
-
-    fn with_addr(&self, addr: usize) -> *const u8 {
-        self.data().with_addr(addr)
     }
 }
 
