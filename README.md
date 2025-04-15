@@ -96,6 +96,44 @@ equivalent to:
 rz | @inflate | mount | load /platform/oxide/kernel/amd64/unix | call
 ```
 
+## Transferring with XMODEM
+
+Note that ZMODEM hasn't been completely reliable in testing.  If
+things appear to hang, try sending a BREAK.  If that fails,
+there is an XMODEM fallback in `bldb`, invoked via the `rx`
+command at the REPL.  XMODEM is a receiver-initiated protocol,
+and to avoid a race condition between the receiver issuing the
+transfer handshake and the sender invoking the XMODEM send
+program (e.g., `sx`), `bldb` will wait for a single character to
+arrive on the UART before starting the protocol.  This character
+must be the ASCII lower-case letter 'g'; any other letter will
+abort the transfer and return to the REPL.
+
+One may use a script to automate this, such as
+[`sxmodem`](https://github.com/oxidecomputer/bldb/blob/main/sxmodem)
+in this repository:
+
+```
+#!/bin/ksh93
+printf g
+exec sx -vv -Xk "$@"
+```
+
+With this, one can transfer, inflate, mount, load, and call into Unix as:
+
+```
+call . load /platform/oxide/kernel/amd64/unix . mount . @inflate . rx
+```
+
+Or, if one prefers,
+
+```
+rx | @inflate | mount | load /platform/oxide/kernel/amd64/unix | call
+```
+
+See also the
+[`rconsx` script](https://github.com/oxidecomputer/bldb/blob/main/rconsx).
+
 ## Commands
 
 The reader supports a handful of "reader commands":
