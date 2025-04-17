@@ -45,9 +45,12 @@ use crate::iomux;
 use crate::mem;
 use crate::mmu;
 use crate::ramdisk;
+use crate::repl;
 use crate::result::Error;
 use crate::uart::{self, Uart};
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
 use core::fmt;
 use core::ops::Range;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -64,6 +67,7 @@ pub(crate) struct Config {
     pub(crate) page_table: mmu::LoaderPageTable,
     pub(crate) ramdisk: Option<Box<dyn ramdisk::FileSystem>>,
     pub(crate) prompt: cons::Prompt,
+    pub(crate) aliases: BTreeMap<String, String>,
 }
 
 impl Config {
@@ -134,6 +138,9 @@ pub(crate) unsafe extern "C" fn init(bist: u32) -> &'static mut Config {
         iomux_region,
         gpio_region,
     ];
+    let aliases = BTreeMap::from_iter(
+        repl::DEF_ALIASES.iter().map(|&(k, v)| (k.into(), v.into())),
+    );
     let mut config = Box::new(Config {
         cons,
         iomux,
@@ -146,6 +153,7 @@ pub(crate) unsafe extern "C" fn init(bist: u32) -> &'static mut Config {
         ),
         ramdisk: None,
         prompt: cons::DEFAULT_PROMPT,
+        aliases,
     });
     if false {
         say_hi_sp(&mut config, 4);

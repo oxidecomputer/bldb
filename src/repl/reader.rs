@@ -199,6 +199,9 @@ pub fn read(
         if eval_reader_command(config, line, env, lastval) {
             continue;
         }
+        if let Some(expansion) = config.aliases.get(line) {
+            break expansion.clone();
+        }
         break s;
     };
     let mut cmds = Vec::<Command>::new();
@@ -311,6 +314,10 @@ Pushes the strings "a", "b", and "c" onto the stack, while,
 will pop the top element.
 
 ## Booting a machine
+
+In the simplest case, run `zoxboot` and send your ramdisk via
+ZMODEM.  `zoxboot` is an alias that expands to to the command
+line below.
 
 To send a compressed ramdisk, inflate it, mount it, load a
 kernel from it, and call into that kernel, passing the ramdisk
