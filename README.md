@@ -53,6 +53,10 @@ will pop the top element.
 
 ## Booting a machine
 
+In the simplest case, run `zoxboot` and send your ramdisk via
+ZMODEM.  `zoxboot` is an alias that expands to to the command
+line below.
+
 Assuming you have booted into `bldb` on some machine of
 interest, you will be presented with a prompt (`@`), at which
 you may type commands.  To send a compressed ramdisk, inflate

@@ -39,6 +39,11 @@ mod sha;
 mod smn;
 mod vm;
 
+pub const DEF_ALIASES: &[(&str, &str)] = &[(
+    "zoxboot",
+    "call . load /platform/oxide/kernel/amd64/unix . mount . @inflate . rz",
+)];
+
 #[derive(Clone)]
 #[allow(dead_code)]
 enum Value {
