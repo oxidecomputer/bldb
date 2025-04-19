@@ -29,6 +29,7 @@ iced-x86 = { version = "1.21.0", features = [
     "no_std",
 ], default-features = false }
 miniz_oxide = "0.9"
+rhai = { version = "1.21.0", default-features = false, features = ["no_std"] }
 seq-macro = "0.3"
 sha2 = { version = "0.11" }
 spin = { version = "0.12", default-features = false, features = [
