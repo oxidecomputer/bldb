@@ -632,9 +632,7 @@ impl InnerTable for PML4 {
         let entry = self.entries[Self::index(va)];
         entry.p().then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML3>()),
-            );
+            assert!(!p.is_null() && p.cast::<PML3>().is_aligned());
             unsafe { &*TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -643,9 +641,7 @@ impl InnerTable for PML4 {
         let entry = self.entries[Self::index(va)];
         entry.p().then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML3>())
-            );
+            assert!(!p.is_null() && p.cast::<PML3>().is_aligned());
             unsafe { &mut *TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -731,9 +727,7 @@ impl InnerTable for PML3 {
         let entry = self.entries[Self::index(va)];
         (entry.p() && !entry.h()).then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML2>()),
-            );
+            assert!(!p.is_null() && p.cast::<PML2>().is_aligned());
             unsafe { &*TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -742,9 +736,7 @@ impl InnerTable for PML3 {
         let entry = self.entries[Self::index(va)];
         (entry.p() && !entry.h()).then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML2>())
-            );
+            assert!(!p.is_null() && p.cast::<PML2>().is_aligned());
             unsafe { &mut *TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -859,9 +851,7 @@ impl InnerTable for PML2 {
         let entry = self.entries[Self::index(va)];
         (entry.p() && !entry.h()).then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML1>()),
-            );
+            assert!(!p.is_null() && p.cast::<PML1>().is_aligned());
             unsafe { &*TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -870,9 +860,7 @@ impl InnerTable for PML2 {
         let entry = self.entries[Self::index(va)];
         (entry.p() && !entry.h()).then(|| {
             let p = unsafe { entry.virt_addr() };
-            assert!(
-                !p.is_null() && p.is_aligned_to(core::mem::align_of::<PML1>())
-            );
+            assert!(!p.is_null() && p.cast::<PML1>().is_aligned());
             unsafe { &mut *TableAlloc::try_with_addr(p.addr()).unwrap() }
         })
     }
@@ -1240,7 +1228,7 @@ impl PageTable {
             return Err(Error::Unmapped);
         };
         let ptr = core::ptr::with_exposed_provenance_mut::<()>(va);
-        if !ptr.is_aligned_to(core::mem::align_of::<T>()) {
+        if !ptr.cast::<T>().is_aligned() {
             return Err(Error::PtrAlign);
         }
         Ok(ptr as *mut T)
@@ -1675,7 +1663,7 @@ mod arena {
             }
             let base = page_allocator.base();
             let ptr = base.with_addr(addr);
-            if !ptr.is_aligned_to(core::mem::align_of::<T>()) {
+            if !ptr.cast::<T>().is_aligned() {
                 return Err(Error::PtrAlign);
             }
             Ok(ptr as *mut T)
