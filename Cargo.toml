@@ -1,3 +1,5 @@
+workspace = { members = ["xtask"] }
+
 [package]
 name = "bldb"
 authors = ["Oxide Computer Company"]
