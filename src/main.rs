@@ -3,11 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #![feature(allocator_api)]
-#![feature(naked_functions)]
-#![feature(pointer_is_aligned_to)]
-#![feature(ptr_mask)]
 #![feature(sync_unsafe_cell)]
-#![feature(type_alias_impl_trait)]
 #![cfg_attr(not(any(test, clippy)), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_op_in_unsafe_fn)]
