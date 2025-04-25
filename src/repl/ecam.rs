@@ -29,7 +29,7 @@ pub(super) fn read(
     env: &mut Vec<repl::Value>,
 ) -> Result<repl::Value> {
     let usage = |error| {
-        println!("usage: ecamrd <addr>");
+        println!("usage: ecamrd b/d/f <offset>");
         error
     };
     let (bus, dev, func) = repl::popenv(env)
@@ -57,7 +57,7 @@ pub(super) fn write(
     env: &mut Vec<repl::Value>,
 ) -> Result<repl::Value> {
     let usage = |error| {
-        println!("usage: ecamwr <addr> <value>");
+        println!("usage: ecamwr b/d/f <offset> <value>");
         error
     };
     let (bus, dev, func) = repl::popenv(env)

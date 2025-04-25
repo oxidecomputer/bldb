@@ -18,7 +18,7 @@ pub(super) fn read(
         error
     };
     let addr = repl::popenv(env).as_num::<u32>().map_err(usage)?;
-    let data = smn::read(addr).map_err(usage)?;
+    let data = smn::read(smn::Index::Smn0, addr).map_err(usage)?;
     println!("{addr:#x} {data:#x}");
     Ok(repl::Value::Unsigned(data.into()))
 }
@@ -34,7 +34,45 @@ pub(super) fn write(
     let addr = repl::popenv(env).as_num::<u32>().map_err(usage)?;
     let value = repl::popenv(env).as_num::<u32>().map_err(usage)?;
     unsafe {
-        smn::write(addr, value)?;
+        smn::write(smn::Index::Smn0, addr, value)?;
+    }
+    Ok(repl::Value::Nil)
+}
+
+pub(super) fn rdsmni(
+    _config: &mut bldb::Config,
+    env: &mut Vec<repl::Value>,
+) -> Result<repl::Value> {
+    let usage = |error| {
+        println!("usage: rdsmni <index> <addr>");
+        error
+    };
+    let index = repl::popenv(env)
+        .as_num::<u8>()
+        .and_then(smn::Index::try_from)
+        .map_err(usage)?;
+    let addr = repl::popenv(env).as_num::<u32>().map_err(usage)?;
+    let data = smn::read(index, addr).map_err(usage)?;
+    println!("{addr:#x} {data:#x}");
+    Ok(repl::Value::Unsigned(data.into()))
+}
+
+pub(super) fn wrsmni(
+    _config: &mut bldb::Config,
+    env: &mut Vec<repl::Value>,
+) -> Result<repl::Value> {
+    let usage = |error| {
+        println!("usage: wrsmni <index> <addr> <value>");
+        error
+    };
+    let index = repl::popenv(env)
+        .as_num::<u8>()
+        .and_then(smn::Index::try_from)
+        .map_err(usage)?;
+    let addr = repl::popenv(env).as_num::<u32>().map_err(usage)?;
+    let value = repl::popenv(env).as_num::<u32>().map_err(usage)?;
+    unsafe {
+        smn::write(index, addr, value)?;
     }
     Ok(repl::Value::Nil)
 }

@@ -243,8 +243,12 @@ Supported commands include:
   sizes, issue mulitple `unmap` calls.
 * `rdsmn <addr>` to read a 32-bit word from the given SMN
   address.
+* `rdsmni <index> <addr>` like `rdsmn`, but using a specific
+  address/data register pair.
 * `wrsmn <addr> <value>` to write a 32-bit word to the given SMN
   address.
+* `wrsmni <index> <addr>` like `wrsmn`, but using a spcecific
+  address/data register pair.
 * `cpuid <leaf> <subleaf>` to return the results of the `CPUID`
   instruction for the given leaf and subleaf.
 * `ecamrd <b/d/f> <offset>` read a 32-bit word from PCIe
