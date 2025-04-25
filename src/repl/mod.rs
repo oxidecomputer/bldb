@@ -264,6 +264,7 @@ fn evalcmd(
         "push" => Ok(Value::Nil),
         "rdmsr" => msr::read(config, env),
         "rdsmn" => smn::read(config, env),
+        "rdsmni" => smn::rdsmni(config, env),
         "rx" => rx::run(config, env),
         "rz" => rz::run(config, env),
         "setbits" => bits::set(config, env),
@@ -274,6 +275,7 @@ fn evalcmd(
         "umount" => mount::umount(config, env),
         "wrmsr" => msr::write(config, env),
         "wrsmn" => smn::write(config, env),
+        "wrsmni" => smn::wrsmni(config, env),
         _ => Err(Error::NoCommand),
     }
 }
