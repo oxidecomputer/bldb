@@ -107,7 +107,7 @@ pub(crate) fn elfinfo(file: &dyn File) -> Result<()> {
 }
 
 /// Parses the ELF executable contained in the given byte slice.
-fn parse_elf(bytes: &[u8]) -> Result<Elf> {
+fn parse_elf(bytes: &[u8]) -> Result<Elf<'_>> {
     let header = parse_header(bytes)?;
     let mut elf = Elf::lazy_parse(header).map_err(|_| Error::ElfParseObject)?;
     elf.program_headers = parse_program_headers(bytes, header)?;
