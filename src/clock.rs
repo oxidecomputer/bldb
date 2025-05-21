@@ -12,13 +12,13 @@ pub const NANOS_PER_SEC: u128 = 1_000_000_000;
 /// Returns the clock frequency of the current CPU in Hertz.
 pub fn frequency() -> u128 {
     const DEFAULT_HZ: u128 = 2_000_000_000;
-    if let Some(tsc_info) = cpuid::tscinfo() {
-        if tsc_info.nominal_frequency() != 0 {
-            return tsc_info
-                .tsc_frequency()
-                .map(|freq| freq.into())
-                .unwrap_or(DEFAULT_HZ);
-        }
+    if let Some(tsc_info) = cpuid::tscinfo()
+        && tsc_info.nominal_frequency() != 0
+    {
+        return tsc_info
+            .tsc_frequency()
+            .map(|freq| freq.into())
+            .unwrap_or(DEFAULT_HZ);
     }
     DEFAULT_HZ
 }
