@@ -35,7 +35,7 @@ impl Directory {
 
     /// Returns an interator over the directory entries in this
     /// directory.
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter::new(self)
     }
 }
