@@ -251,10 +251,10 @@ pub fn read(
                 break;
             }
         }
-        if !tokens.is_empty() {
-            if let Token::Value(Value::Str(cmd)) = tokens[0].clone() {
-                tokens[0] = Token::Value(Value::Cmd(cmd));
-            }
+        if !tokens.is_empty()
+            && let Token::Value(Value::Str(cmd)) = tokens[0].clone()
+        {
+            tokens[0] = Token::Value(Value::Cmd(cmd));
         }
         cmds.push(Command::Cmd(cmdline, tokens));
     }

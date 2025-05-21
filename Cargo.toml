@@ -43,7 +43,7 @@ spin = { version = "0.10.0", default-features = false, features = [
 static_assertions = "1.1"
 x86 = "0.52"
 xmodem = { git = "https://github.com/oxidecomputer/xmodem.rs", default-features = false }
-zmodem2 = { git = "https://github.com/oxidecomputer/zmodem2", branch = "nostd", default-features = false }
+zmodem2 = { git = "https://github.com/oxidecomputer/zmodem2", default-features = false }
 
 [profile.dev]
 panic = "abort"

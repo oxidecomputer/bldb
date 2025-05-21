@@ -114,15 +114,12 @@ fn print_mode(mode: cpio_reader::Mode) {
     let alt = |bit, t, f| {
         if mode.contains(bit) { t } else { f }
     };
-    // For some reason, the cpio reader library appears to have
-    // the meaning of these bits mirrored with respect to the owner
-    // bits.
-    print!("{}", alt(Mode::WORLD_READABLE, 'r', '-'));
-    print!("{}", alt(Mode::WORLD_WRITABLE, 'w', '-'));
+    print!("{}", alt(Mode::USER_READABLE, 'r', '-'));
+    print!("{}", alt(Mode::USER_WRITABLE, 'w', '-'));
     if !mode.contains(Mode::SUID) {
-        print!("{}", alt(Mode::WORLD_EXECUTABLE, 'x', '-'));
+        print!("{}", alt(Mode::USER_EXECUTABLE, 'x', '-'));
     } else {
-        print!("{}", alt(Mode::WORLD_EXECUTABLE, 's', 'S'));
+        print!("{}", alt(Mode::USER_EXECUTABLE, 's', 'S'));
     }
 
     print!("{}", alt(Mode::GROUP_READABLE, 'r', '-'));
@@ -133,11 +130,11 @@ fn print_mode(mode: cpio_reader::Mode) {
         print!("{}", alt(Mode::GROUP_EXECUTABLE, 's', 'S'));
     }
 
-    print!("{}", alt(Mode::USER_READABLE, 'r', '-'));
-    print!("{}", alt(Mode::USER_WRITABLE, 'w', '-'));
+    print!("{}", alt(Mode::WORLD_READABLE, 'r', '-'));
+    print!("{}", alt(Mode::WORLD_WRITABLE, 'w', '-'));
     if !mode.contains(Mode::STICKY) {
-        print!("{}", alt(Mode::USER_EXECUTABLE, 'x', '-'));
+        print!("{}", alt(Mode::WORLD_EXECUTABLE, 'x', '-'));
     } else {
-        print!("{}", alt(Mode::USER_EXECUTABLE, 't', 'T'));
+        print!("{}", alt(Mode::WORLD_EXECUTABLE, 't', 'T'));
     }
 }

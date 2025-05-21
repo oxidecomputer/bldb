@@ -111,6 +111,11 @@ impl BumpAlloc {
 
     /// Attempts to allocate a region of memory of the given
     /// alignment and size.
+    ///
+    /// Note that allocators are an explicit example of a use
+    /// case where the clippy `mut_from_ref` lint gives false
+    /// positives.
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn alloc_bytes(
         &self,
         align: usize,
