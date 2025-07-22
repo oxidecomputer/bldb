@@ -23,10 +23,10 @@ fn check_phys_addr(pair: (u64, usize)) -> Result<(u64, usize)> {
 
 fn check_virt_range(va: *const (), len: usize) -> Result<*const ()> {
     let addr = va.addr();
-    if (addr % mem::V4KA::SIZE) != 0 {
+    if !addr.is_multiple_of(mem::V4KA::SIZE) {
         return Err(Error::PageAlign);
     }
-    if (len % mem::V4KA::SIZE) != 0 {
+    if !len.is_multiple_of(mem::V4KA::SIZE) {
         return Err(Error::PageAlign);
     }
     if !mem::is_canonical_range(addr, addr + len) {

@@ -274,14 +274,13 @@ pub fn gpio_page_addr() -> mem::V4KA {
     mem::V4KA::new(0xfed8_1000)
 }
 
-const PHBL_MIN: usize = 2 * mem::GIB - 256 * mem::MIB;
-const PHBL_BASE: *mut u8 = core::ptr::without_provenance_mut(PHBL_MIN);
-
 /// Returns a zeroed slice over the given region.
 fn zeroed_region_mut(start: usize, end: usize) -> &'static mut [u8] {
+    const PHBL_MIN: usize = 2 * mem::GIB - 256 * mem::MIB;
+    let phbl_base = core::ptr::with_exposed_provenance_mut::<u8>(PHBL_MIN);
     assert!(PHBL_MIN <= start && start < end && end <= saddr().addr());
     let len = end - start;
-    let ptr = PHBL_BASE.with_addr(start);
+    let ptr = phbl_base.with_addr(start);
     unsafe {
         core::ptr::write_bytes(ptr, 0, len);
         core::slice::from_raw_parts_mut(ptr, len)

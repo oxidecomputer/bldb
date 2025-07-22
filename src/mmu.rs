@@ -180,7 +180,7 @@ impl Frame for PFN1G {
     const SIZE: usize = 1 << 30;
 
     fn new(addr: u64) -> PFN1G {
-        assert_eq!(addr % Self::SIZE as u64, 0);
+        assert!(addr.is_multiple_of(Self::SIZE as u64));
         PFN1G(addr)
     }
 
@@ -1074,8 +1074,8 @@ impl PageTable {
         let attrs = region.attrs();
         while start != end {
             let len = if end.wrapping_sub(start) >= PFN1G::SIZE
-                && start % PFN1G::SIZE == 0
-                && (pa as usize) % PFN1G::SIZE == 0
+                && start.is_multiple_of(PFN1G::SIZE)
+                && (pa as usize).is_multiple_of(PFN1G::SIZE)
             {
                 unsafe {
                     self.map(Page1G::new(start), PFN1G::new(pa), attrs);
@@ -1083,8 +1083,8 @@ impl PageTable {
                 self.flush_page(start);
                 PFN1G::SIZE
             } else if end.wrapping_sub(start) >= PFN2M::SIZE
-                && start % PFN2M::SIZE == 0
-                && (pa as usize) % PFN2M::SIZE == 0
+                && start.is_multiple_of(PFN2M::SIZE)
+                && (pa as usize).is_multiple_of(PFN2M::SIZE)
             {
                 unsafe {
                     self.map(Page2M::new(start), PFN2M::new(pa), attrs);
@@ -1092,8 +1092,8 @@ impl PageTable {
                 self.flush_page(start);
                 PFN2M::SIZE
             } else if end.wrapping_sub(start) >= PFN4K::SIZE
-                && start % PFN4K::SIZE == 0
-                && (pa as usize) % PFN4K::SIZE == 0
+                && start.is_multiple_of(PFN4K::SIZE)
+                && (pa as usize).is_multiple_of(PFN4K::SIZE)
             {
                 unsafe {
                     self.map(Page4K::new(start), PFN4K::new(pa), attrs);
@@ -1128,21 +1128,21 @@ impl PageTable {
         assert!(mem::is_canonical_range(start, end));
         while start != end {
             let len = if end.wrapping_sub(start) >= PFN1G::SIZE
-                && start % PFN1G::SIZE == 0
+                && start.is_multiple_of(PFN1G::SIZE)
             {
                 unsafe { self.unmap(Page1G::new(start)) }
                     .ok_or(Error::Unmapped)?;
                 self.flush_page(start);
                 PFN1G::SIZE
             } else if end.wrapping_sub(start) >= PFN2M::SIZE
-                && start % PFN2M::SIZE == 0
+                && start.is_multiple_of(PFN2M::SIZE)
             {
                 unsafe { self.unmap(Page2M::new(start)) }
                     .ok_or(Error::Unmapped)?;
                 self.flush_page(start);
                 PFN2M::SIZE
             } else if end.wrapping_sub(start) >= PFN4K::SIZE
-                && start % PFN4K::SIZE == 0
+                && start.is_multiple_of(PFN4K::SIZE)
             {
                 unsafe { self.unmap(Page4K::new(start)) }
                     .ok_or(Error::Unmapped)?;

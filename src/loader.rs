@@ -177,14 +177,14 @@ fn load_segment<T: Read + ?Sized>(
     file: &T,
 ) -> Result<(*mut u8, usize)> {
     let pa = segment.p_paddr;
-    if pa % mem::P4KA::ALIGN != 0 {
+    if !pa.is_multiple_of(mem::P4KA::ALIGN) {
         return Err(Error::ElfSegPAlign);
     }
     let vm = segment.vm_range();
     if vm.contains(&mem::LOW_CANON_SUP) || vm.contains(&mem::HI_CANON_INF) {
         return Err(Error::ElfSegNonCanon);
     }
-    if vm.start % mem::V4KA::ALIGN != 0 {
+    if !vm.start.is_multiple_of(mem::V4KA::ALIGN) {
         return Err(Error::ElfSegVAlign);
     }
     if vm.end <= vm.start {
