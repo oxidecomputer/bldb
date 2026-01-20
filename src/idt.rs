@@ -303,7 +303,7 @@ extern "C" fn trap(frame: &mut TrapFrame) {
     } else {
         // The seemingly superfluous cast to usize and then
         // again to u64 keeps clippy happy.
-        frame.rip = crate::bldb::dnr as usize as u64;
+        frame.rip = crate::bldb::dnr as *const () as usize as u64;
     }
 }
 
