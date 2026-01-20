@@ -44,9 +44,10 @@ pub const DEF_ALIASES: &[(&str, &str)] = &[(
     "call . load /platform/oxide/kernel/amd64/unix . mount . @inflate . rz",
 )];
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[allow(dead_code)]
 enum Value {
+    #[default]
     Nil,
     Slice(&'static [u8]),
     Pair(usize, usize),
@@ -175,12 +176,6 @@ impl Value {
             &Value::Pair(addr, len) => Ok((unsigned_to_ptr_mut(addr)?, len)),
             _ => Err(Error::BadArgs),
         }
-    }
-}
-
-impl Default for Value {
-    fn default() -> Self {
-        Self::Nil
     }
 }
 
