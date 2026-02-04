@@ -154,6 +154,7 @@ fn build(profile: BuildProfile, locked: Locked, features: Features) {
     let target = target();
     let args = format!(
         "build {profile} {locked} {features} \
+            -Z json-target-spec \
             -Z build-std=core,alloc \
             -Z build-std-features=compiler-builtins-mem \
             --target {target}.json"
