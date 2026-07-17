@@ -87,14 +87,14 @@ impl BumpAlloc {
     /// and the second is the requested block itself.
     pub(crate) fn try_alloc(
         &self,
-        align: usize,
         size: usize,
+        align: usize,
     ) -> Option<(Block, Block)> {
         let base = self.arena.as_ptr();
         let mut first = ptr::null_mut();
         let mut adjust = 0;
         self.cursor
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
                 first = base.wrapping_add(current);
                 adjust = first.align_offset(align);
                 let offset =
@@ -118,10 +118,10 @@ impl BumpAlloc {
     #[allow(clippy::mut_from_ref)]
     pub(crate) fn alloc_bytes(
         &self,
-        align: usize,
         size: usize,
+        align: usize,
     ) -> Option<&mut [u8]> {
-        let (_, block) = self.try_alloc(align, size)?;
+        let (_, block) = self.try_alloc(size, align)?;
         let ptr = block.as_ptr();
         unsafe {
             ptr::write_bytes(ptr, 0, size);
