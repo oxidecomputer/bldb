@@ -1680,7 +1680,7 @@ mod arena {
             assert_eq!(align, PAGE_SIZE);
             assert_eq!(size, PAGE_SIZE);
             let page_allocator = unsafe { &*PAGE_ALLOCATOR.get() };
-            let a = page_allocator.alloc_bytes(align, size);
+            let a = page_allocator.alloc_bytes(size, align);
             let p = a.ok_or(AllocError)?;
             Ok(p.into())
         }
