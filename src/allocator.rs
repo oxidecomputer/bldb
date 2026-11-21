@@ -336,8 +336,7 @@ impl QuickFit {
     fn align_prefix(prefix: Block) -> Block {
         let ptr = prefix.as_ptr();
         let len = prefix.len();
-        let offset = ptr.align_offset(MIN_ALLOC_SIZE);
-        assert!(offset <= len);
+        let offset = usize::min(ptr.align_offset(MIN_ALLOC_SIZE), len);
         unsafe {
             Block::new_from_raw_parts(ptr.wrapping_add(offset), len - offset)
         }
@@ -395,7 +394,8 @@ impl QuickFit {
         let new_layout =
             Layout::from_size_align(new_size, layout.align()).expect("layout");
         let (size, align) = Self::adjust(new_layout);
-        if size == layout.size() && align == layout.align() {
+        let (osize, oalign) = Self::adjust(layout);
+        if size == osize && align == oalign {
             return block;
         }
         let np = self.malloc(new_layout);
@@ -467,6 +467,7 @@ impl QuickFit {
                         align = MIN_ALLOC_SIZE;
                         hblock.cast()
                     })
+                    .or(Some(hblock))
                     .expect("allocated header block");
                 let header = Header::new(block, size, align, None);
                 unsafe {
@@ -507,23 +508,24 @@ impl QuickFit {
     where
         F: Fn(&Header) -> bool,
     {
+        let head = list;
         let mut prev: Option<NonNull<Header>> = None;
-        while let Some(mut node) = list {
-            let node = unsafe { node.as_mut() };
+        while let Some(mut nodeptr) = list {
+            let node = unsafe { nodeptr.as_mut() };
+            let nodeptr = Some(nodeptr);
             if predicate(node) {
                 let next = node.next.take();
                 if let Some(mut prev) = prev {
                     let prev = unsafe { prev.as_mut() };
                     prev.next = next;
-                } else {
-                    list = next;
+                    return (nodeptr, head);
                 }
-                return (NonNull::new(node), list);
+                return (nodeptr, next);
             }
-            prev = NonNull::new(node);
+            prev = nodeptr;
             list = node.next;
         }
-        (None, list)
+        (None, head)
     }
 
     /// Splits the list into it's first element and tail and
