@@ -139,7 +139,7 @@ mod legacy {
     ) -> Address {
         use bit_field::BitField;
         let addr = 0u32
-            .set_bit(31, true)
+            .set_bit_to(31, true)
             .set_bits(16..24, bus.0.into())
             .set_bits(11..16, dev as u32)
             .set_bits(8..11, func as u32)
